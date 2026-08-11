@@ -152,12 +152,15 @@ class VideoJob(threading.Thread):
                     results = self.model.track(
                         frame, persist=True, tracker=config.TRACKER_CFG,
                         classes=[config.PERSON_CLASS_ID], conf=config.CONFIDENCE_THRESHOLD,
+                        imgsz=config.PROCESS_WIDTH or 1280,
                         verbose=False,
                     )[0]
                 else:
                     results = self.model.predict(
                         frame, classes=[config.PERSON_CLASS_ID],
-                        conf=config.CONFIDENCE_THRESHOLD, verbose=False,
+                        conf=config.CONFIDENCE_THRESHOLD,
+                        imgsz=config.PROCESS_WIDTH or 1280,
+                        verbose=False,
                     )[0]
                 inference_ms = round((time.time() - infer_start) * 1000, 1)
 

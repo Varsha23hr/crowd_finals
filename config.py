@@ -16,7 +16,7 @@ CAMERAS = [
     # {"id": "cam2", "name": "Food Court", "source": "sample_videos/crowd_test2.mp4"},
 ]
 
-PROCESS_WIDTH = 960  # resize frames to this width for speed; None = keep original
+PROCESS_WIDTH = 1920  # resize frames to this width for speed; None = keep original
 
 # ---------------------------------------------------------------------------
 # FEATURE TOGGLES — turn each add-on feature on/off
@@ -36,8 +36,8 @@ ENABLE_PDF_REPORT = True          # auto-generate session_report.pdf on stop
 # ---------------------------------------------------------------------------
 # YOLO MODEL
 # ---------------------------------------------------------------------------
-MODEL_PATH = "yolov8n.pt"
-CONFIDENCE_THRESHOLD = 0.4
+MODEL_PATH = "yolov8m.pt"
+CONFIDENCE_THRESHOLD = 0.1
 PERSON_CLASS_ID = 0
 TRACKER_CFG = "bytetrack.yaml"   # bundled with ultralytics
 
