@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emergency Contacts</title>
+
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/emergency_contacts.css">
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+
+<div class="container">
+
+    <div class="page-header">
+        <h1>🚨 Emergency Contact Management</h1>
+        <p>
+            Manage emergency contacts who will receive alerts whenever
+            overcrowding is detected.
+        </p>
+    </div>
+
+    <div class="card">
+
+        <h2>Add Emergency Contact</h2>
+
+        <form id="contactForm">
+
+            <div class="row">
+
+                <div class="input-group">
+                    <label>Full Name</label>
+                    <input
+                        type="text"
+                        id="name"
+                        placeholder="Enter Full Name"
+                        required
+                    >
+                </div>
+
+                <div class="input-group">
+                    <label>Designation</label>
+                    <input
+                        type="text"
+                        id="role"
+                        placeholder="Security Officer"
+                    >
+                </div>
+
+            </div>
+
+            <div class="row">
+
+                <div class="input-group">
+                    <label>Phone Number</label>
+                    <input
+                        type="text"
+                        id="phone"
+                        placeholder="+91 9876543210"
+                        required
+                    >
+                </div>
+
+                <div class="input-group">
+                    <label>Email Address</label>
+                    <input
+                        type="email"
+                        id="email"
+                        placeholder="example@gmail.com"
+                    >
+                </div>
+
+            </div>
+
+            <div class="row">
+
+                <div class="input-group">
+                    <label>Camera Zone</label>
+
+                    <select id="camera_zone">
+
+                        <option value="Entrance">
+                            Entrance
+                        </option>
+
+                        <option value="Exit">
+                            Exit
+                        </option>
+
+                        <option value="Parking">
+                            Parking
+                        </option>
+
+                        <option value="Platform">
+                            Platform
+                        </option>
+
+                        <option value="Lobby">
+                            Lobby
+                        </option>
+
+                        <option value="Food Court">
+                            Food Court
+                        </option>
+
+                        <option value="Custom">
+                            Custom
+                        </option>
+
+                    </select>
+
+                </div>
+
+                <div class="input-group">
+
+                    <label>Priority</label>
+
+                    <select id="priority">
+
+                        <option value="1">
+                            Primary
+                        </option>
+
+                        <option value="2">
+                            Secondary
+                        </option>
+
+                        <option value="3">
+                            Backup
+                        </option>
+
+                    </select>
+
+                </div>
+
+            </div>
+
+            <div class="button-group">
+
+                <button
+                    type="submit"
+                    class="btn-primary"
+                >
+                    Add Contact
+                </button>
+
+                <button
+                    type="reset"
+                    class="btn-secondary"
+                >
+                    Clear
+                </button>
+
+            </div>
+
+        </form>
+
+    </div>
+
+    <div class="card">
+
+        <div class="table-header">
+
+            <h2>Emergency Contacts</h2>
+
+            <input
+                type="text"
+                id="searchInput"
+                placeholder="Search Contact..."
+            >
+
+        </div>
+
+        <div class="table-container">
+
+            <table id="contactsTable">
+
+                <thead>
+
+                <tr>
+
+                    <th>ID</th>
+
+                    <th>Name</th>
+
+                    <th>Role</th>
+
+                    <th>Phone</th>
+
+                    <th>Email</th>
+
+                    <th>Zone</th>
+
+                    <th>Priority</th>
+
+                    <th>Actions</th>
+
+                </tr>
+
+                </thead>
+
+                <tbody id="contactsBody">
+
+                <!-- Filled by JavaScript -->
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+        <!-- Edit Contact Modal -->
+    <div id="editModal" class="modal">
+
+        <div class="modal-content">
+
+            <span class="close" onclick="closeModal()">&times;</span>
+
+            <h2>Edit Contact</h2>
+
+            <form id="editForm">
+
+                <input type="hidden" id="editId">
+
+                <label>Name</label>
+                <input type="text" id="editName" required>
+
+                <label>Role</label>
+                <input type="text" id="editRole">
+
+                <label>Phone</label>
+                <input type="text" id="editPhone" required>
+
+                <label>Email</label>
+                <input type="email" id="editEmail">
+
+                <label>Camera Zone</label>
+
+                <select id="editZone">
+                    <option>Entrance</option>
+                    <option>Exit</option>
+                    <option>Parking</option>
+                    <option>Platform</option>
+                    <option>Lobby</option>
+                    <option>Food Court</option>
+                    <option>Custom</option>
+                </select>
+
+                <label>Priority</label>
+
+                <select id="editPriority">
+                    <option value="1">Primary</option>
+                    <option value="2">Secondary</option>
+                    <option value="3">Backup</option>
+                </select>
+
+                <br><br>
+
+                <button
+                    type="submit"
+                    class="btn-primary">
+
+                    Update Contact
+
+                </button>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>
+
+<script src="/static/emergency_contacts.js"></script>
+
+</body>
+</html>

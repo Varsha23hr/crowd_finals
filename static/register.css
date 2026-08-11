@@ -1,0 +1,219 @@
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:Arial,Helvetica,sans-serif;
+}
+
+body{
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    overflow:hidden;
+    background:linear-gradient(135deg,#071d31,#102b48,#154b80);
+}
+
+.background{
+    position:fixed;
+    inset:0;
+    overflow:hidden;
+}
+
+.circle{
+    position:absolute;
+    border-radius:50%;
+    background:rgba(255,255,255,.08);
+    animation:float 8s infinite ease-in-out;
+}
+
+.c1{
+    width:300px;
+    height:300px;
+    left:-100px;
+    top:-100px;
+}
+
+.c2{
+    width:400px;
+    height:400px;
+    right:-150px;
+    bottom:-150px;
+}
+
+.c3{
+    width:200px;
+    height:200px;
+    left:50%;
+    top:10%;
+}
+
+@keyframes float{
+
+0%{transform:translateY(0px);}
+
+50%{transform:translateY(-30px);}
+
+100%{transform:translateY(0px);}
+
+}
+
+.register-card{
+
+width:520px;
+
+padding:45px;
+
+border-radius:25px;
+
+background:rgba(255,255,255,.12);
+
+backdrop-filter:blur(20px);
+
+box-shadow:0 20px 50px rgba(0,0,0,.35);
+
+color:white;
+
+z-index:10;
+
+}
+
+.logo{
+
+font-size:55px;
+
+text-align:center;
+
+margin-bottom:15px;
+
+color:#5db2ff;
+
+}
+
+h1{
+
+text-align:center;
+
+margin-bottom:10px;
+
+font-size:34px;
+
+}
+
+p{
+
+text-align:center;
+
+margin-bottom:30px;
+
+color:#dbeafe;
+
+}
+
+.input-group{
+
+display:flex;
+
+align-items:center;
+
+background:white;
+
+border-radius:12px;
+
+margin-bottom:18px;
+
+padding:12px 15px;
+
+}
+
+.input-group i{
+
+color:#2563eb;
+
+font-size:18px;
+
+margin-right:12px;
+
+}
+
+.input-group input{
+
+border:none;
+
+outline:none;
+
+width:100%;
+
+font-size:17px;
+
+}
+
+button{
+
+width:100%;
+
+padding:15px;
+
+border:none;
+
+border-radius:12px;
+
+background:#2563eb;
+
+color:white;
+
+font-size:18px;
+
+cursor:pointer;
+
+transition:.3s;
+
+}
+
+button:hover{
+
+background:#1d4ed8;
+
+transform:translateY(-3px);
+
+}
+
+.bottom-link{
+
+margin-top:25px;
+
+text-align:center;
+
+font-size:16px;
+
+}
+
+.bottom-link a{
+
+color:#7dd3fc;
+
+text-decoration:none;
+
+font-weight:bold;
+
+}
+
+.bottom-link a:hover{
+
+text-decoration:underline;
+
+}
+
+.error{
+
+background:#ef4444;
+
+padding:12px;
+
+border-radius:10px;
+
+margin-bottom:20px;
+
+text-align:center;
+
+}

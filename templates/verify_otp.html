@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<meta charset="UTF-8">
+<title>Verify OTP</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+
+*{
+margin:0;
+padding:0;
+box-sizing:border-box;
+font-family:Poppins,sans-serif;
+}
+
+body{
+height:100vh;
+display:flex;
+justify-content:center;
+align-items:center;
+background:linear-gradient(135deg,#1e3c72,#2a5298);
+overflow:hidden;
+}
+
+.card{
+width:420px;
+background:white;
+padding:45px;
+border-radius:20px;
+box-shadow:0 20px 60px rgba(0,0,0,.25);
+animation:fade 1s;
+}
+
+@keyframes fade{
+from{
+opacity:0;
+transform:translateY(40px);
+}
+to{
+opacity:1;
+transform:translateY(0);
+}
+}
+
+h2{
+text-align:center;
+margin-bottom:10px;
+color:#1e3c72;
+}
+
+p{
+text-align:center;
+color:#666;
+margin-bottom:25px;
+font-size:14px;
+}
+
+input{
+width:100%;
+padding:15px;
+border-radius:12px;
+border:1px solid #ccc;
+margin-bottom:20px;
+font-size:16px;
+letter-spacing:5px;
+text-align:center;
+}
+
+button{
+width:100%;
+padding:15px;
+border:none;
+background:#1e3c72;
+color:white;
+border-radius:12px;
+font-size:16px;
+cursor:pointer;
+transition:.3s;
+}
+
+button:hover{
+background:#2a5298;
+}
+
+.error{
+background:#ffd6d6;
+padding:12px;
+border-radius:10px;
+margin-bottom:20px;
+color:red;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="card">
+
+<h2>Email Verification</h2>
+
+<p>Enter the 6-digit OTP sent to your email.</p>
+
+{% if error %}
+<div class="error">
+{{ error }}
+</div>
+{% endif %}
+
+<form method="POST">
+
+<input
+type="text"
+name="otp"
+maxlength="6"
+placeholder="Enter OTP"
+required>
+
+<button type="submit">
+
+Verify OTP
+
+</button>
+
+</form>
+
+</div>
+
+</body>
+</html>

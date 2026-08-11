@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crowd Detection &amp; Overcrowding Analysis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css?v=3">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="app-shell" id="appShell">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-mark">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="8" cy="8" r="3" stroke="white" stroke-width="1.6"/>
+          <circle cx="17" cy="9" r="2.4" stroke="white" stroke-width="1.6"/>
+          <path d="M2.5 19c0-3 2.5-5.4 5.5-5.4s5.5 2.4 5.5 5.4" stroke="white" stroke-width="1.6" stroke-linecap="round"/>
+          <path d="M13.7 15.2c2.5.2 4.3 2.1 4.3 4.4" stroke="white" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <span class="brand-name-text">CrowdSight<b>AI</b></span>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active" data-page="dashboard">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+        <span>Dashboard</span>
+      </a>
+      <a href="#" class="nav-item" data-page="upload">
+        <svg viewBox="0 0 24 24"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+        <span>Upload Video</span>
+      </a>
+      <a href="#" class="nav-item" data-page="analysis">
+        <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M8 15l3-4 3 3 4-6"/></svg>
+        <span>Analysis</span>
+      </a>
+      <a href="#" class="nav-item" data-page="reports">
+        <svg viewBox="0 0 24 24"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/></svg>
+        <span>Reports</span>
+      </a>
+      <a href="#" class="nav-item" data-page="history">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>
+        <span>History</span>
+      </a>
+      <a href="#" class="nav-item" data-page="settings">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 13a7.7 7.7 0 0 0 0-2l2-1.6-2-3.5-2.4 1a7.6 7.6 0 0 0-1.7-1L14.9 3h-4l-.4 2.9a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.5L6.4 11a7.7 7.7 0 0 0 0 2l-2 1.6 2 3.5 2.4-1a7.6 7.6 0 0 0 1.7 1l.4 2.9h4l.4-2.9a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.5-2-1.6Z"/></svg>
+        <span>Settings</span>
+      </a>
+      <a href="/emergency_contacts" class="nav-item">
+    <svg viewBox="0 0 24 24">
+        <path d="M12 2L2 7v6c0 5.5 3.8 10.7 10 12 6.2-1.3 10-6.5 10-12V7L12 2z"/>
+        <path d="M12 8v8"/>
+        <path d="M8 12h8"/>
+    </svg>
+    <span>Emergency Contacts</span>
+</a>
+    </nav>
+
+    <a href="/logout" class="nav-item nav-logout">
+      <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+      <span>Logout</span>
+    </a>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main-col">
+    <header class="topbar">
+      <button class="icon-btn" id="sidebarToggle" aria-label="Toggle sidebar">
+        <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <div class="topbar-title">
+        <span id="pageTitle">Dashboard</span>
+      </div>
+      <div class="topbar-actions">
+        <button class="icon-btn" id="notifBtn" aria-label="Notifications">
+          <svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+          <span class="notif-dot" id="notifDot" hidden></span>
+        </button>
+        <div class="notif-panel" id="notifPanel" hidden>
+          <div class="notif-panel-title">Recent Alerts</div>
+          <div id="notifList" class="notif-list"><div class="empty-hint">No alerts yet.</div></div>
+        </div>
+        <div class="user-menu">
+          <button class="user-chip" id="userChip">
+            <span class="avatar">{{ user[0]|upper }}</span>
+            <span class="user-name">{{ user }}</span>
+            <svg viewBox="0 0 24 24" class="chev"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div class="user-dropdown" id="userDropdown" hidden>
+            <a href="#" class="nav-item" data-page="settings">Settings</a>
+            <a href="/logout">Logout</a>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="content">
+
+      <!-- ============ DASHBOARD PAGE ============ -->
+      <section class="page active" id="page-dashboard">
+        <div class="cards-row">
+          <div class="metric-card">
+            <div class="metric-icon icon-blue">
+              <svg viewBox="0 0 24 24"><path d="M23 7l-7 5 7 5V7Z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+            </div>
+            <div class="metric-body">
+              <div class="metric-value" id="mVideos">0</div>
+              <div class="metric-label">Videos Analyzed</div>
+            </div>
+            <div class="metric-trend up">▲ All-time</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-icon icon-red">
+              <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
+            <div class="metric-body">
+              <div class="metric-value" id="mMaxCrowd">0</div>
+              <div class="metric-label">Maximum Crowd Detected</div>
+            </div>
+            <div class="metric-trend">Peak, all videos</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-icon icon-amber">
+              <svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l4-6 3 3 5-7"/></svg>
+            </div>
+            <div class="metric-body">
+              <div class="metric-value" id="mAvgCrowd">0</div>
+              <div class="metric-label">Average Crowd Count</div>
+            </div>
+            <div class="metric-trend">Across all videos</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-icon icon-orange">
+              <svg viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+            </div>
+            <div class="metric-body">
+              <div class="metric-value" id="mAlerts">0</div>
+              <div class="metric-label">Overcrowding Alerts</div>
+            </div>
+            <div class="metric-trend down">Events flagged</div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-header"><h3>Recent Analyses</h3></div>
+            <div class="card-body" id="dashRecentList">
+              <div class="empty-hint">No videos analyzed yet — upload one to get started.</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>Getting Started</h3></div>
+            <div class="card-body">
+              <ol class="steps-list">
+                <li>Go to <b>Upload Video</b> and drop in a recorded clip (MP4, AVI, MOV, MKV).</li>
+                <li>The model analyzes it for person count, density and overcrowding events.</li>
+                <li>Review results in <b>Analysis</b>, then export a report from <b>Reports</b>.</li>
+              </ol>
+              <button class="btn-primary" data-nav="upload">Upload a Video</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ UPLOAD PAGE ============ -->
+      <section class="page" id="page-upload">
+        <div class="card upload-card">
+          <div class="card-header"><h3>Upload Video</h3></div>
+          <div class="card-body">
+            
+            <div class="area-config-section">
+              <h4>Step 1: Configure Area & Threshold</h4>
+              <p>Calculate the safe crowd threshold by specifying the physical dimensions of the monitored area.</p>
+              
+              <div class="config-row">
+                <div class="form-group">
+                  <label for="shapeSelect">Select Shape</label>
+                  <select id="shapeSelect" class="form-control">
+                    <option value="" disabled selected>-- Select Shape --</option>
+                    <option value="rectangle">Rectangle</option>
+                    <option value="square">Square</option>
+                    <option value="circle">Circle</option>
+                    <option value="triangle">Triangle</option>
+                    <option value="polygon">Regular Polygon</option>
+                    <option value="custom">Custom Area</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Dynamic Dimension Inputs -->
+              <div id="dimensionsInputs" class="dimensions-grid" style="display: none;">
+                <!-- Filled via JS -->
+              </div>
+              
+              <div class="calc-results" id="calcResults" style="display: none;">
+                <div class="result-box">
+                  <span class="result-label">Calculated Area</span>
+                  <span class="result-value"><span id="calcArea">0</span> m²</span>
+                </div>
+                <div class="result-box highlighted">
+                  <span class="result-label">Safe Crowd Threshold</span>
+                  <span class="result-value"><span id="calcThreshold">0</span> people</span>
+                  <span class="result-sub">(@ 1.2 m²/person)</span>
+                </div>
+              </div>
+            </div>
+
+            <hr class="divider">
+
+            <h4>Step 2: Upload Video</h4>
+            <div class="dropzone disabled" id="dropzone" title="Please configure area first">
+              <input type="file" id="fileInput" accept=".mp4,.avi,.mov,.mkv" hidden>
+              <svg viewBox="0 0 24 24" class="dz-icon"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+              <div class="dz-title">Drag &amp; Drop Video Here</div>
+              <div class="dz-sub">or</div>
+              <button class="btn-primary" id="browseBtn">Browse Files</button>
+              <div class="dz-formats">Supported formats: MP4, AVI, MOV, MKV &nbsp;•&nbsp; up to {{ config.MAX_UPLOAD_MB }}MB</div>
+            </div>
+
+            <div class="file-info-row" id="fileInfoRow" hidden>
+              <div class="file-info">
+                <svg viewBox="0 0 24 24"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v5h5"/></svg>
+                <div>
+                  <div class="file-name" id="fileName">—</div>
+                  <div class="file-meta" id="fileMeta">—</div>
+                </div>
+              </div>
+              <button class="btn-primary" id="startUploadBtn">Analyze Video</button>
+            </div>
+
+            <div class="progress-block" id="uploadProgressBlock" hidden>
+              <div class="progress-label"><span>Uploading…</span><span id="uploadPct">0%</span></div>
+              <div class="progress-bar"><span id="uploadProgressFill" style="width:0%"></span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" id="processingCard" hidden>
+          <div class="card-header"><h3>Processing Status</h3></div>
+          <div class="card-body processing-body">
+            <div class="circular-progress" id="circProgress">
+              <svg viewBox="0 0 120 120">
+                <circle cx="60" cy="60" r="52" class="circ-bg"/>
+                <circle cx="60" cy="60" r="52" class="circ-fill" id="circFill"/>
+              </svg>
+              <div class="circ-label"><span id="circPct">0%</span><small>complete</small></div>
+            </div>
+            <div class="processing-stats">
+              <div class="pstat"><span class="pstat-label">Frames Processed</span><span class="pstat-value" id="pFrames">0 / 0</span></div>
+              <div class="pstat"><span class="pstat-label">Current Detected People</span><span class="pstat-value" id="pCount">0</span></div>
+              <div class="pstat"><span class="pstat-label">Estimated Remaining Time</span><span class="pstat-value" id="pEta">—</span></div>
+              <div class="pstat"><span class="pstat-label">Status</span><span class="pstat-value" id="pStatus">Queued</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ ANALYSIS PAGE ============ -->
+      <section class="page" id="page-analysis">
+        <div id="analysisEmpty" class="card"><div class="card-body"><div class="empty-hint">No analysis selected. Upload a video or pick one from History.</div></div></div>
+
+        <div id="analysisContent" hidden>
+          <div class="card">
+            <div class="card-header"><h3 id="analysisVideoName">Video</h3><span class="risk-badge" id="analysisRiskBadge">SAFE</span></div>
+            <div class="card-body">
+              <!-- Dual video layout -->
+              <div class="dual-video-grid">
+                <div class="video-pane">
+                  <div class="video-label"><span class="vl-dot original"></span>Original Video</div>
+                  <video id="originalVideo" class="analysis-video" preload="auto" muted></video>
+                </div>
+                <div class="video-pane">
+                  <div class="video-label"><span class="vl-dot detection"></span>AI Detection Video</div>
+                  <video id="analysisVideo" class="analysis-video" preload="auto" muted></video>
+                </div>
+              </div>
+
+              <!-- Unified playback controls -->
+              <div class="unified-controls" id="unifiedControls">
+                <button class="ctrl-btn" id="playPauseBtn" title="Play / Pause">
+                  <svg viewBox="0 0 24 24" id="playIcon"><polygon points="6,3 20,12 6,21" fill="white" stroke="none"/></svg>
+                </button>
+                <span class="time-display" id="currentTimeDisplay">0:00</span>
+                <input type="range" class="seek-slider" id="seekSlider" min="0" max="100" step="0.1" value="0">
+                <span class="time-display" id="durationDisplay">0:00</span>
+                <select class="speed-select" id="playbackSpeed" title="Playback Speed">
+                  <option value="0.25">0.25x</option>
+                  <option value="0.5">0.5x</option>
+                  <option value="1" selected>1x</option>
+                  <option value="1.5">1.5x</option>
+                  <option value="2">2x</option>
+                </select>
+                <button class="ctrl-btn" id="alarmToggleBtn" title="Toggle Alarm (Muted by default)">
+                  <svg viewBox="0 0 24 24" id="alarmIcon"><path d="M11 5L6 9H2v6h4l5 4V5z M23 9l-6 6 M17 9l6 6" stroke="white" fill="none" stroke-width="2"/></svg>
+                </button>
+                <button class="ctrl-btn" id="fullscreenBtn" title="Fullscreen (Detection)">
+                  <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" stroke="white" fill="none" stroke-width="2"/></svg>
+                </button>
+              </div>
+
+              <!-- Frame-by-frame navigation -->
+              <div class="frame-nav-controls" id="frameNavControls">
+                <span class="nav-label">Frame Navigation</span>
+                <button class="frame-btn" id="prevFrameBtn" title="Previous Frame">
+                  <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+                </button>
+                <button class="frame-btn" id="nextFrameBtn" title="Next Frame">
+                  <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+                </button>
+                <div class="frame-input-group">
+                  <input type="number" class="frame-input" id="jumpFrameInput" placeholder="Frame #" min="1">
+                  <button class="frame-go-btn" id="jumpFrameBtn">Go</button>
+                </div>
+                <span class="frame-current" id="frameCurrentDisplay">Frame: 0 / 0</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Live Frame Analysis Panel -->
+          <div class="card">
+            <div class="card-header"><h3>Live Frame Analysis</h3></div>
+            <div class="card-body">
+              <div class="live-stats-panel" id="liveStatsPanel">
+                <div class="live-stat-card active">
+                  <div class="ls-icon"><svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="3"/><path d="M7 12h10"/></svg></div>
+                  <div class="ls-label">Frame Number</div>
+                  <div class="ls-value" id="lsFrame">—</div>
+                </div>
+                <div class="live-stat-card active">
+                  <div class="ls-icon icon-purple"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></div>
+                  <div class="ls-label">Timestamp</div>
+                  <div class="ls-value" id="lsTimestamp">—</div>
+                </div>
+                <div class="live-stat-card active">
+                  <div class="ls-icon icon-success"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+                  <div class="ls-label">People Count</div>
+                  <div class="ls-value" id="lsCount">—</div>
+                </div>
+                <div class="live-stat-card active">
+                  <div class="ls-icon icon-warning"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l4-6 3 3 5-7"/></svg></div>
+                  <div class="ls-label">Crowd Density</div>
+                  <div class="ls-value" id="lsDensity">—</div>
+                </div>
+                <div class="live-stat-card active">
+                  <div class="ls-icon icon-orange"><svg viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></div>
+                  <div class="ls-label">Threshold</div>
+                  <div class="ls-value" id="lsThreshold">—</div>
+                </div>
+                <div class="live-stat-card active">
+                  <div class="ls-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg></div>
+                  <div class="ls-label">Occupancy %</div>
+                  <div class="ls-value" id="lsOccupancy">—</div>
+                </div>
+                <div class="live-stat-card active">
+                  <div class="ls-icon icon-danger"><svg viewBox="0 0 24 24"><path d="M12 22c5.5 0 10-4.5 10-10S17.5 2 12 2 2 6.5 2 12s4.5 10 10 10Z"/><path d="M12 8v4l3 3"/></svg></div>
+                  <div class="ls-label">Risk Level</div>
+                  <div class="ls-value" id="lsRisk">—</div>
+                </div>
+                <div class="live-stat-card active">
+                  <div class="ls-icon icon-purple"><svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8Z"/></svg></div>
+                  <div class="ls-label">Inference Time</div>
+                  <div class="ls-value" id="lsInference">—</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Analysis Summary (kept below) -->
+          <div class="card">
+            <div class="card-header"><h3>Analysis Summary</h3></div>
+            <div class="card-body">
+              <div class="summary-list" id="summaryList"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><h3>Crowd Analytics</h3></div>
+            <div class="card-body charts-grid">
+              <div class="chart-box"><div class="chart-title">Crowd Count vs Time</div><canvas id="chartCountTime"></canvas></div>
+              <div class="chart-box"><div class="chart-title">Crowd Density Timeline</div><canvas id="chartDensity"></canvas></div>
+              <div class="chart-box"><div class="chart-title">Occupancy Trend</div><canvas id="chartOccupancy"></canvas></div>
+              <div class="chart-box"><div class="chart-title">Alert Frequency</div><canvas id="chartAlertFreq"></canvas></div>
+              <div class="chart-box wide"><div class="chart-title">People Count Distribution</div><canvas id="chartDistribution"></canvas></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><h3>Event Timeline</h3></div>
+            <div class="card-body">
+              <div class="event-timeline" id="eventTimeline"></div>
+              <div class="timeline-legend">
+                <span><i class="dot dot-safe"></i>Safe</span>
+                <span><i class="dot dot-warning"></i>Warning</span>
+                <span><i class="dot dot-high"></i>High</span>
+                <span><i class="dot dot-critical"></i>Critical</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><h3>Overcrowding Events</h3></div>
+            <div class="card-body table-wrap">
+              <table class="data-table" id="eventsTable">
+                <thead><tr>
+                  <th>Start</th><th>End</th><th>Duration</th><th>Peak Count</th>
+                  <th>Density</th><th>Severity</th><th>Status</th><th></th>
+                </tr></thead>
+                <tbody id="eventsTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-header"><h3>Crowd Density Heatmap</h3></div>
+              <div class="card-body">
+                <img id="heatmapImg" class="heatmap-img" alt="Crowd density heatmap">
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><h3>Key Frame Gallery</h3></div>
+              <div class="card-body">
+                <div class="keyframe-grid" id="keyframeGrid"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ REPORTS PAGE ============ -->
+      <section class="page" id="page-reports">
+        <div class="card">
+          <div class="card-header"><h3>Reports</h3></div>
+          <div class="card-body">
+            <label class="field-label" for="reportVideoSelect">Select analyzed video</label>
+            <select id="reportVideoSelect" class="select-input"></select>
+
+            <div class="report-meta" id="reportMeta" hidden>
+              <div><span>Report generated</span><b id="reportDate">—</b></div>
+              <div><span>Analysis duration</span><b id="reportDuration">—</b></div>
+              <div><span>Overall risk</span><b id="reportRisk">—</b></div>
+            </div>
+
+            <div class="export-buttons" id="exportButtons" hidden>
+              <button class="btn-export pdf" id="exportPdf">
+                <svg viewBox="0 0 24 24"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v5h5"/></svg>
+                Download PDF
+              </button>
+              <button class="btn-export excel" id="exportExcel">
+                <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 8l8 8M16 8l-8 8"/></svg>
+                Export Excel
+              </button>
+              <button class="btn-export csv" id="exportCsv">
+                <svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M4 10h16M10 4v16"/></svg>
+                Export CSV
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ HISTORY PAGE ============ -->
+      <section class="page" id="page-history">
+        <div class="card">
+          <div class="card-header">
+            <h3>Analysis History</h3>
+            <input type="text" id="historySearch" class="search-input" placeholder="Search by video name…">
+          </div>
+          <div class="card-body table-wrap">
+            <table class="data-table" id="historyTable">
+              <thead><tr>
+                <th>Video Name</th><th>Upload Date</th><th>Status</th>
+                <th>Maximum Crowd</th><th>Alerts</th><th></th>
+              </tr></thead>
+              <tbody id="historyTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ SETTINGS PAGE ============ -->
+      <section class="page" id="page-settings">
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-header"><h3>Account</h3></div>
+            <div class="card-body">
+              <div class="settings-row"><span>Signed in as</span><b>{{ user }}</b></div>
+              <a href="/logout" class="btn-secondary" style="margin-top:12px;display:inline-block;">Log out</a>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>Detection Thresholds</h3></div>
+            <div class="card-body">
+              <div class="settings-row"><span>Safe limit</span><b>&lt; {{ config.SAFE_LIMIT }} people</b></div>
+              <div class="settings-row"><span>Warning</span><b>{{ config.SAFE_LIMIT }}–{{ config.HIGH_LIMIT - 1 }} people</b></div>
+              <div class="settings-row"><span>High</span><b>{{ config.HIGH_LIMIT }}–{{ config.CROWD_THRESHOLD - 1 }} people</b></div>
+              <div class="settings-row"><span>Critical</span><b>≥ {{ config.CROWD_THRESHOLD }} people</b></div>
+              <div class="settings-note">Configured in <code>config.py</code>. Change and restart the server to apply new thresholds.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<script src="/static/app.js?v=3"></script>
+</body>
+</html>

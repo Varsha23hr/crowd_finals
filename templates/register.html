@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Create Account | CrowdSight AI</title>
+
+<link rel="stylesheet"
+href="{{ url_for('static', filename='register.css') }}">
+
+<link rel="stylesheet"
+href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+
+<style>
+    .validation-msg {
+        font-size: 0.78rem;
+        margin-top: 4px;
+        margin-left: 36px;
+        min-height: 18px;
+        transition: color 0.3s;
+    }
+    .validation-msg.error { color: #ff6b6b; }
+    .validation-msg.success { color: #51cf66; }
+    .input-group input.invalid { border-color: #ff6b6b !important; }
+    .input-group input.valid   { border-color: #51cf66 !important; }
+</style>
+
+</head>
+
+<body>
+
+<div class="background">
+    <div class="circle c1"></div>
+    <div class="circle c2"></div>
+    <div class="circle c3"></div>
+</div>
+
+<div class="register-card">
+
+    <div class="logo">
+        <i class="fa-solid fa-users-viewfinder"></i>
+    </div>
+
+    <h1>Create Account</h1>
+
+    <p>Create your CrowdSight AI account</p>
+
+    {% if error %}
+    <div class="error">
+        {{ error }}
+    </div>
+    {% endif %}
+
+    <form method="POST" id="registerForm">
+
+        <div class="input-group">
+            <i class="fa-solid fa-id-card"></i>
+            <input
+                type="text"
+                name="username"
+                id="username"
+                placeholder="Username"
+                required>
+        </div>
+
+        <div class="input-group">
+            <i class="fa-solid fa-envelope"></i>
+            <input
+                type="email"
+                name="email"
+                id="email"
+                placeholder="Email Address"
+                required>
+            <div class="validation-msg" id="emailMsg"></div>
+        </div>
+
+        <div class="input-group">
+            <i class="fa-solid fa-phone"></i>
+            <input
+                type="text"
+                name="phone"
+                id="phone"
+                placeholder="Phone Number"
+                maxlength="10"
+                required>
+            <div class="validation-msg" id="phoneMsg"></div>
+        </div>
+
+        <div class="input-group">
+            <i class="fa-solid fa-lock"></i>
+            <input
+                type="password"
+                name="password"
+                id="password"
+                placeholder="Password"
+                required>
+            <div class="validation-msg" id="passwordMsg"></div>
+        </div>
+
+        <button type="submit" id="submitBtn">
+            <i class="fa-solid fa-user-plus"></i>
+            Create Account
+        </button>
+
+    </form>
+
+    <div class="bottom-link">
+        Already have an account?
+        <a href="{{ url_for('login') }}">
+            Login
+        </a>
+    </div>
+
+</div>
+
+<script>
+(function () {
+    const emailInput    = document.getElementById('email');
+    const phoneInput    = document.getElementById('phone');
+    const passwordInput = document.getElementById('password');
+    const emailMsg      = document.getElementById('emailMsg');
+    const phoneMsg      = document.getElementById('phoneMsg');
+    const passwordMsg   = document.getElementById('passwordMsg');
+    const submitBtn     = document.getElementById('submitBtn');
+
+    /* ── helpers ── */
+    function setMsg(el, input, text, ok) {
+        el.textContent = text;
+        el.className = 'validation-msg ' + (ok ? 'success' : 'error');
+        input.classList.toggle('valid',   ok);
+        input.classList.toggle('invalid', !ok);
+    }
+    function clearMsg(el, input) {
+        el.textContent = '';
+        el.className = 'validation-msg';
+        input.classList.remove('valid', 'invalid');
+    }
+
+    /* ── email: must end with @gmail.com ── */
+    const emailRe = /^[a-zA-Z0-9._%+\-]+@gmail\.com$/;
+    emailInput.addEventListener('input', function () {
+        const v = this.value.trim();
+        if (v === '') { clearMsg(emailMsg, this); return; }
+        if (emailRe.test(v)) {
+            setMsg(emailMsg, this, '✓ Valid Gmail address', true);
+        } else {
+            setMsg(emailMsg, this, '✗ Must be a valid @gmail.com address', false);
+        }
+    });
+
+    /* ── phone: exactly 10 digits ── */
+    phoneInput.addEventListener('input', function () {
+        // strip non-digits while typing
+        this.value = this.value.replace(/\D/g, '');
+        const v = this.value;
+        if (v === '') { clearMsg(phoneMsg, this); return; }
+        if (/^\d{10}$/.test(v)) {
+            setMsg(phoneMsg, this, '✓ Valid phone number', true);
+        } else {
+            setMsg(phoneMsg, this, '✗ Must be exactly 10 digits (' + v.length + '/10)', false);
+        }
+    });
+
+    /* ── password: ≥8 chars, 1 uppercase, 1 special char ── */
+    passwordInput.addEventListener('input', function () {
+        const v = this.value;
+        if (v === '') { clearMsg(passwordMsg, this); return; }
+        const hasLen     = v.length >= 8;
+        const hasUpper   = /[A-Z]/.test(v);
+        const hasSpecial = /[!@#$%^&*()\-_=+\[\]{};:'",.<>\/?\\|`~]/.test(v);
+
+        if (hasLen && hasUpper && hasSpecial) {
+            setMsg(passwordMsg, this, '✓ Strong password', true);
+        } else {
+            const missing = [];
+            if (!hasLen)     missing.push('at least 8 characters');
+            if (!hasUpper)   missing.push('one uppercase letter');
+            if (!hasSpecial) missing.push('one special character');
+            setMsg(passwordMsg, this, '✗ Needs: ' + missing.join(', '), false);
+        }
+    });
+
+    /* ── block submit if any field is invalid ── */
+    document.getElementById('registerForm').addEventListener('submit', function (e) {
+        const emailOk    = emailRe.test(emailInput.value.trim());
+        const phoneOk    = /^\d{10}$/.test(phoneInput.value);
+        const pw         = passwordInput.value;
+        const pwOk       = pw.length >= 8 && /[A-Z]/.test(pw) && /[!@#$%^&*()\-_=+\[\]{};:'",.<>\/?\\|`~]/.test(pw);
+
+        if (!emailOk || !phoneOk || !pwOk) {
+            e.preventDefault();
+            // trigger validations so the user sees what's wrong
+            emailInput.dispatchEvent(new Event('input'));
+            phoneInput.dispatchEvent(new Event('input'));
+            passwordInput.dispatchEvent(new Event('input'));
+        }
+    });
+})();
+</script>
+
+</body>
+</html>
