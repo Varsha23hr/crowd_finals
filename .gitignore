@@ -1,42 +1,6 @@
-# Python / Bytecode
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-# Virtual Environments
-venv/
-env/
-.venv/
-.env
-
-# Dependencies & IDEs
-node_modules/
-.vscode/
-.idea/
-
-# Large Model Weights (YOLO / PyTorch)
-*.pt
-*.pth
-*.h5
-*.onnx
-*.engine
-
-# Media & Video files
+output/
 *.mp4
-*.avi
-*.mov
-*.mkv
-*.webm
-*.flv
-*.gif
-*.zip
-
-# Database & local state
-*.db
-*.sqlite
+*.pt
+__pycache__/
 instance/
-
-# Generated Outputs (keep folder structure via .gitkeep)
-output/*
-!output/**/.gitkeep
+*.pyc
