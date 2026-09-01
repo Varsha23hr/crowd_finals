@@ -174,40 +174,7 @@
           <div class="card-body">
             
             <div class="area-config-section">
-              <h4>Step 1: Configure Area & Threshold</h4>
-              <p>Calculate the safe crowd threshold by specifying the physical dimensions of the monitored area.</p>
-              
-              <div class="config-row">
-                <div class="form-group">
-                  <label for="shapeSelect">Select Shape</label>
-                  <select id="shapeSelect" class="form-control">
-                    <option value="" disabled selected>-- Select Shape --</option>
-                    <option value="rectangle">Rectangle</option>
-                    <option value="square">Square</option>
-                    <option value="circle">Circle</option>
-                    <option value="triangle">Triangle</option>
-                    <option value="polygon">Regular Polygon</option>
-                    <option value="custom">Custom Area</option>
-                  </select>
-                </div>
-              </div>
-
-              <!-- Dynamic Dimension Inputs -->
-              <div id="dimensionsInputs" class="dimensions-grid" style="display: none;">
-                <!-- Filled via JS -->
-              </div>
-              
-              <div class="calc-results" id="calcResults" style="display: none;">
-                <div class="result-box">
-                  <span class="result-label">Calculated Area</span>
-                  <span class="result-value"><span id="calcArea">0</span> m²</span>
-                </div>
-                <div class="result-box highlighted">
-                  <span class="result-label">Safe Crowd Threshold</span>
-                  <span class="result-value"><span id="calcThreshold">0</span> people</span>
-                  <span class="result-sub">(@ 1.2 m²/person)</span>
-                </div>
-              </div>
+              <p>The system will automatically calibrate the Safe Crowd Threshold by analyzing the first 5 seconds of the video.</p>
             </div>
 
             <hr class="divider">

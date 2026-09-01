@@ -63,6 +63,7 @@ for _d in (config.UPLOAD_DIR, config.PROCESSED_DIR, config.KEYFRAME_DIR,
 
 print(f"[INFO] Loading YOLO model: {config.MODEL_PATH} ...")
 _shared_model = YOLO(config.MODEL_PATH)
+_shared_fallback_model = YOLO(getattr(config, 'FALLBACK_MODEL_PATH', 'yolov8n-face.pt'))
 
 init_log_file()
 
@@ -329,10 +330,10 @@ def api_upload():
     file.save(save_path)
 
     threshold = request.form.get("threshold", type=int)
-    if not threshold or threshold <= 0:
+    if threshold is None:
         threshold = config.CROWD_THRESHOLD
 
-    job = VideoJob(job_id, save_path, file.filename, _shared_model,
+    job = VideoJob(job_id, save_path, file.filename, _shared_model, fallback_model=_shared_fallback_model,
                     uploaded_by=current_user(), threshold=threshold)
     _active_jobs[job_id] = job
     job.start()

@@ -50,18 +50,30 @@ class VideoJob(threading.Thread):
     """Processes one uploaded video end-to-end in a background thread."""
 
     def __init__(self, job_id: str, filepath: str, original_filename: str,
-                 model: YOLO, bytetrack: bool = True, uploaded_by: str = "Unknown",
+                 model: YOLO, bytetrack: bool = True, uploaded_by: str = "Unknown", fallback_model: YOLO = None,
                  threshold: int = config.CROWD_THRESHOLD):
         super().__init__(daemon=True)
         self.job_id = job_id
         self.filepath = filepath
         self.original_filename = original_filename
         self.model = model
+        self.fallback_model = fallback_model
+        self._last_realtime_alert_t = -999  # cooldown tracker for real-time alerts
         self.bytetrack = bytetrack
         self.uploaded_by = uploaded_by
         self.threshold = threshold
-        self.high_limit = max(1, round(threshold * 0.8))
-        self.safe_limit = max(1, round(threshold * 0.6))
+        self.auto_calibrate = (threshold == 0)
+        
+        if self.auto_calibrate:
+            # Temporary defaults while calibrating
+            self.threshold = 999999
+            self.high_limit = 999999
+            self.safe_limit = 999999
+            self._calibrated = False
+        else:
+            self.high_limit = max(1, round(threshold * 0.8))
+            self.safe_limit = max(1, round(threshold * 0.6))
+            self._calibrated = True
 
         self._lock = threading.Lock()
         self._status = {
@@ -152,6 +164,7 @@ class VideoJob(threading.Thread):
                     results = self.model.track(
                         frame, persist=True, tracker=config.TRACKER_CFG,
                         classes=[config.PERSON_CLASS_ID], conf=config.CONFIDENCE_THRESHOLD,
+                        iou=getattr(config, "IOU_THRESHOLD", 0.7),
                         imgsz=config.PROCESS_WIDTH or 1280,
                         verbose=False,
                     )[0]
@@ -159,13 +172,12 @@ class VideoJob(threading.Thread):
                     results = self.model.predict(
                         frame, classes=[config.PERSON_CLASS_ID],
                         conf=config.CONFIDENCE_THRESHOLD,
+                        iou=getattr(config, "IOU_THRESHOLD", 0.7),
                         imgsz=config.PROCESS_WIDTH or 1280,
                         verbose=False,
                     )[0]
-                inference_ms = round((time.time() - infer_start) * 1000, 1)
 
                 boxes = results.boxes
-                person_count = len(boxes) if boxes is not None else 0
                 box_coords = []
                 centroids = []
                 if boxes is not None:
@@ -173,6 +185,33 @@ class VideoJob(threading.Thread):
                         x1, y1, x2, y2 = map(int, box.xyxy[0])
                         box_coords.append((x1, y1, x2, y2))
                         centroids.append(((x1 + x2) // 2, (y1 + y2) // 2))
+
+                # --- Fallback Head Detection ---
+                if getattr(self, "fallback_model", None):
+                    results_fb = self.fallback_model.predict(
+                        frame, classes=[config.PERSON_CLASS_ID],
+                        conf=config.CONFIDENCE_THRESHOLD,
+                        iou=getattr(config, "IOU_THRESHOLD", 0.7),
+                        imgsz=config.PROCESS_WIDTH or 1280,
+                        verbose=False,
+                    )[0]
+                    boxes_fb = results_fb.boxes
+                    if boxes_fb is not None:
+                        for box in boxes_fb:
+                            fx1, fy1, fx2, fy2 = map(int, box.xyxy[0])
+                            fcx, fcy = (fx1 + fx2) // 2, (fy1 + fy2) // 2
+                            # Check if head center is inside any primary body box
+                            is_inside = False
+                            for (px1, py1, px2, py2) in box_coords:
+                                if px1 <= fcx <= px2 and py1 <= fcy <= py2:
+                                    is_inside = True
+                                    break
+                            if not is_inside:
+                                box_coords.append((fx1, fy1, fx2, fy2))
+                                centroids.append((fcx, fcy))
+                
+                person_count = len(box_coords)
+                inference_ms = round((time.time() - infer_start) * 1000, 1)
                 self._last_boxes = box_coords
                 self._last_count = person_count
                 self._last_inference_ms = inference_ms
@@ -183,12 +222,48 @@ class VideoJob(threading.Thread):
                 inference_ms = getattr(self, "_last_inference_ms", 0.0)
                 centroids = [((x1 + x2) // 2, (y1 + y2) // 2) for (x1, y1, x2, y2) in box_coords]
 
+            counts_all.append(person_count)
+
+            if self.auto_calibrate and not self._calibrated:
+                if t_sec > 5.0 or (frame_id == total_frames and total_frames > 0):
+                    # Calibrate based on the max crowd seen so far
+                    calib_max = max(counts_all) if counts_all else 0
+                    # Add a 50% buffer to normal max crowd to get threshold, min 10
+                    self.threshold = max(10, int(calib_max * 1.5))
+                    self.high_limit = max(1, round(self.threshold * 0.8))
+                    self.safe_limit = max(1, round(self.threshold * 0.6))
+                    self._calibrated = True
+                    print(f"[VideoJob {self.job_id}] Auto-calibrated threshold to {self.threshold} after {t_sec:.1f}s")
+            
             status = self._classify(person_count)
             if person_count >= self.threshold:
                 play_siren()
             else:
                 stop_siren()
-            counts_all.append(person_count)
+
+            # --- Real-time email alert (fires immediately when HIGH/CRITICAL) ---
+            ALERT_COOLDOWN_SECONDS = 60  # only send once per minute max
+            if status in ("HIGH", "CRITICAL"):
+                if (t_sec - self._last_realtime_alert_t) >= ALERT_COOLDOWN_SECONDS:
+                    self._last_realtime_alert_t = t_sec
+                    try:
+                        from app import app as flask_app
+                        details = {
+                            "Video": self.original_filename,
+                            "Timestamp": f"{t_sec:.1f}s into video",
+                            "Current crowd count": person_count,
+                            "Threshold": self.threshold,
+                            "Alert level": status,
+                        }
+                        send_alert_email(
+                            self.original_filename,
+                            f"REAL-TIME {status} CROWD ALERT at {t_sec:.1f}s",
+                            details,
+                            flask_app,
+                        )
+                        print(f"[VideoJob {self.job_id}] Real-time {status} alert sent at t={t_sec:.1f}s (count={person_count})")
+                    except Exception as _e:
+                        print(f"[VideoJob {self.job_id}] Real-time alert failed: {_e}")
 
             # --- accumulate heatmap grid ---
             h, w = frame.shape[:2]
@@ -294,8 +369,8 @@ class VideoJob(threading.Thread):
             h264_path = out_path.replace(".mp4", "_h264.mp4")
             subprocess.run([
                 ffmpeg_exe, "-y", "-i", out_path,
-                "-c:v", "libx264", "-preset", "fast",
-                "-crf", "23", "-pix_fmt", "yuv420p",
+                "-c:v", "libx264", "-preset", "ultrafast",
+                "-crf", "28", "-pix_fmt", "yuv420p",
                 "-movflags", "+faststart",
                 "-an", h264_path,
             ], check=True, capture_output=True)
@@ -304,24 +379,7 @@ class VideoJob(threading.Thread):
         except Exception as exc:
             print(f"[VideoJob {self.job_id}] H.264 re-encode skipped: {exc}")
 
-        # Also re-encode the original upload if it's not browser-compatible
-        try:
-            import imageio_ffmpeg
-            ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
-            import subprocess
-            # Probe: try a quick ffmpeg check on the uploaded file
-            orig_h264 = self.filepath + ".h264.mp4"
-            subprocess.run([
-                ffmpeg_exe, "-y", "-i", self.filepath,
-                "-c:v", "libx264", "-preset", "fast",
-                "-crf", "23", "-pix_fmt", "yuv420p",
-                "-movflags", "+faststart",
-                "-an", orig_h264,
-            ], check=True, capture_output=True)
-            os.replace(orig_h264, self.filepath)
-            print(f"[VideoJob {self.job_id}] Original video re-encoded for browser playback.")
-        except Exception as exc:
-            print(f"[VideoJob {self.job_id}] Original re-encode skipped: {exc}")
+
 
         duration_sec = frame_id / fps if fps else 0
 

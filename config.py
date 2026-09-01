@@ -37,7 +37,9 @@ ENABLE_PDF_REPORT = True          # auto-generate session_report.pdf on stop
 # YOLO MODEL
 # ---------------------------------------------------------------------------
 MODEL_PATH = "yolov8m.pt"
-CONFIDENCE_THRESHOLD = 0.1
+FALLBACK_MODEL_PATH = "yolov8n-face.pt"
+CONFIDENCE_THRESHOLD = 0.25
+IOU_THRESHOLD = 0.8
 PERSON_CLASS_ID = 0
 TRACKER_CFG = "bytetrack.yaml"   # bundled with ultralytics
 
@@ -69,7 +71,7 @@ MAX_UPLOAD_MB = 500
 
 # Run detection on every Nth frame to keep processing time reasonable on a
 # demo/final-year-project machine; 1 = every frame (most accurate, slowest).
-FRAME_SKIP = 1
+FRAME_SKIP = 5
 # One timeseries sample per this many seconds of video (keeps result JSON small).
 TIMESERIES_SAMPLE_SECONDS = 1.0
 
@@ -154,7 +156,7 @@ SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 465
 SENDER_EMAIL = "varshavarshahr@gmail.com"
 SENDER_PASSWORD = "rcje etwn fsdp pkjt"
-RECEIVER_EMAIL = ["varshavarshahr@gmail.com"]
+RECEIVER_EMAIL = ["2005sahanahv@gmail.com"]
 
 
 # ---------------------------------------------------------------------------

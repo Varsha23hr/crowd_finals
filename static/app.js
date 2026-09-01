@@ -139,109 +139,12 @@ async function loadDashboardSummary() {
 // ---------------------------------------------------------------------
 // Area Configuration & Upload page
 // ---------------------------------------------------------------------
-let calculatedArea = 0;
 let calculatedThreshold = 0;
-const defaultSafeDensity = 1.2;
 
-const shapeSelect = document.getElementById("shapeSelect");
-const dimInputs = document.getElementById("dimensionsInputs");
-const calcResults = document.getElementById("calcResults");
-const calcAreaSpan = document.getElementById("calcArea");
 const calcThresholdSpan = document.getElementById("calcThreshold");
 const dropzone = document.getElementById("dropzone");
 
-const shapeFields = {
-  rectangle: [
-    { id: 'rectL', label: 'Length (m)', type: 'number' },
-    { id: 'rectW', label: 'Width (m)', type: 'number' }
-  ],
-  square: [
-    { id: 'sqSide', label: 'Side (m)', type: 'number' }
-  ],
-  circle: [
-    { id: 'circRad', label: 'Radius (m)', type: 'number' }
-  ],
-  triangle: [
-    { id: 'triBase', label: 'Base (m)', type: 'number' },
-    { id: 'triHeight', label: 'Height (m)', type: 'number' }
-  ],
-  polygon: [
-    { id: 'polySides', label: 'Number of Sides', type: 'number' },
-    { id: 'polySideLen', label: 'Side Length (m)', type: 'number' }
-  ],
-  custom: [
-    { id: 'custArea', label: 'Area (m²)', type: 'number' }
-  ]
-};
-
-if (shapeSelect) {
-  shapeSelect.addEventListener("change", (e) => {
-    const shape = e.target.value;
-    dimInputs.style.display = 'grid';
-    dimInputs.innerHTML = '';
-    
-    if (shapeFields[shape]) {
-      shapeFields[shape].forEach(f => {
-        const div = document.createElement('div');
-        div.className = 'form-group';
-        div.innerHTML = `
-          <label for="${f.id}">${f.label}</label>
-          <input type="${f.type}" id="${f.id}" class="form-control" min="0" step="0.1" placeholder="0">
-        `;
-        dimInputs.appendChild(div);
-      });
-      
-      // Add event listeners to new inputs
-      dimInputs.querySelectorAll('input').forEach(inp => {
-        inp.addEventListener('input', calculateArea);
-      });
-    }
-    calculateArea();
-  });
-}
-
-function calculateArea() {
-  const shape = shapeSelect.value;
-  let area = 0;
-
-  if (shape === 'rectangle') {
-    const l = parseFloat(document.getElementById('rectL')?.value || 0);
-    const w = parseFloat(document.getElementById('rectW')?.value || 0);
-    area = l * w;
-  } else if (shape === 'square') {
-    const s = parseFloat(document.getElementById('sqSide')?.value || 0);
-    area = s * s;
-  } else if (shape === 'circle') {
-    const r = parseFloat(document.getElementById('circRad')?.value || 0);
-    area = Math.PI * r * r;
-  } else if (shape === 'triangle') {
-    const b = parseFloat(document.getElementById('triBase')?.value || 0);
-    const h = parseFloat(document.getElementById('triHeight')?.value || 0);
-    area = 0.5 * b * h;
-  } else if (shape === 'polygon') {
-    const n = parseFloat(document.getElementById('polySides')?.value || 0);
-    const s = parseFloat(document.getElementById('polySideLen')?.value || 0);
-    if (n >= 3 && s > 0) {
-      // Area of regular polygon = (n * s^2) / (4 * tan(PI/n))
-      area = (n * s * s) / (4 * Math.tan(Math.PI / n));
-    }
-  } else if (shape === 'custom') {
-    area = parseFloat(document.getElementById('custArea')?.value || 0);
-  }
-
-  calculatedArea = area > 0 ? area : 0;
-  calculatedThreshold = Math.max(1, Math.round(calculatedArea / defaultSafeDensity));
-
-  if (calculatedArea > 0) {
-    calcResults.style.display = 'flex';
-    calcAreaSpan.textContent = calculatedArea.toFixed(1);
-    calcThresholdSpan.textContent = calculatedThreshold;
-    dropzone.classList.remove('disabled');
-  } else {
-    calcResults.style.display = 'none';
-    dropzone.classList.add('disabled');
-  }
-}
+dropzone.classList.remove('disabled');
 const fileInput = document.getElementById("fileInput");
 const browseBtn = document.getElementById("browseBtn");
 let selectedFile = null;
@@ -293,15 +196,10 @@ document.getElementById("startUploadBtn").addEventListener("click", () => {
 });
 
 function uploadVideo(file) {
-  if (calculatedArea <= 0) {
-    alert("Please configure the area dimensions first.");
-    return;
-  }
-
   const form = new FormData();
   form.append("video", file);
-  form.append("area", calculatedArea);
-  form.append("threshold", calculatedThreshold);
+  form.append("area", 0);
+  form.append("threshold", calculatedThreshold || 20);
 
   const progressBlock = document.getElementById("uploadProgressBlock");
   const fill = document.getElementById("uploadProgressFill");

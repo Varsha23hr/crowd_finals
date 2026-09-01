@@ -25,6 +25,109 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
     .validation-msg.success { color: #51cf66; }
     .input-group input.invalid { border-color: #ff6b6b !important; }
     .input-group input.valid   { border-color: #51cf66 !important; }
+
+    /* ── Password wrapper ── */
+    .password-wrapper {
+        position: relative;
+        width: 100%;
+    }
+    .password-wrapper input {
+        padding-right: 36px;
+    }
+    .toggle-password {
+        position: absolute;
+        right: 4px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: #94a3b8;
+        font-size: 17px;
+        padding: 4px;
+        width: auto;
+        transition: color 0.2s;
+    }
+    .toggle-password:hover {
+        color: #475569;
+        background: none;
+        transform: translateY(-50%);
+    }
+
+    /* ── Strength bar ── */
+    .password-strength-section {
+        margin-top: 2px;
+        margin-bottom: 10px;
+        padding: 0 4px;
+    }
+    .strength-bar-track {
+        width: 100%;
+        height: 5px;
+        background: rgba(255,255,255,0.15);
+        border-radius: 3px;
+        margin-top: 8px;
+        overflow: hidden;
+    }
+    .strength-bar-fill {
+        height: 100%;
+        width: 0%;
+        border-radius: 3px;
+        transition: width 0.4s ease, background 0.4s ease;
+    }
+    .strength-label {
+        font-size: 0.82rem;
+        font-weight: 600;
+        margin-top: 6px;
+        color: #94a3b8;
+        transition: color 0.3s;
+    }
+
+    /* ── Checklist ── */
+    .password-checklist {
+        list-style: none;
+        padding: 0;
+        margin: 8px 0 0 0;
+    }
+    .password-checklist li {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.85rem;
+        padding: 3px 0;
+        color: rgba(255,255,255,0.7);
+        transition: color 0.3s;
+    }
+    .password-checklist li .check-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        font-size: 11px;
+        flex-shrink: 0;
+        transition: background 0.3s, color 0.3s;
+    }
+    .password-checklist li.fail .check-icon {
+        background: rgba(239,68,68,0.2);
+        color: #ef4444;
+    }
+    .password-checklist li.pass .check-icon {
+        background: rgba(34,197,94,0.2);
+        color: #22c55e;
+    }
+    .password-checklist li.pass {
+        color: rgba(255,255,255,0.9);
+    }
+
+    /* ── Password error msg ── */
+    .password-error-msg {
+        font-size: 0.78rem;
+        margin-top: 6px;
+        min-height: 18px;
+        color: #ff6b6b;
+        transition: opacity 0.3s;
+    }
 </style>
 
 </head>
@@ -88,16 +191,50 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
             <div class="validation-msg" id="phoneMsg"></div>
         </div>
 
-        <div class="input-group">
+        <div class="input-group" id="passwordGroup">
             <i class="fa-solid fa-lock"></i>
-            <input
-                type="password"
-                name="password"
-                id="password"
-                placeholder="Password"
-                required>
-            <div class="validation-msg" id="passwordMsg"></div>
+            <div class="password-wrapper">
+                <input
+                    type="password"
+                    name="password"
+                    id="password"
+                    placeholder="Password"
+                    required>
+                <button type="button" class="toggle-password" id="togglePassword" tabindex="-1">
+                    <i class="fa-solid fa-eye-slash"></i>
+                </button>
+            </div>
         </div>
+
+        <!-- Password Strength Section -->
+        <div class="password-strength-section" id="passwordStrengthSection" style="display:none;">
+            <div class="strength-bar-track">
+                <div class="strength-bar-fill" id="strengthBarFill"></div>
+            </div>
+            <div class="strength-label" id="strengthLabel"></div>
+
+            <ul class="password-checklist">
+                <li id="checkLen" class="fail">
+                    <span class="check-icon"><i class="fa-solid fa-xmark"></i></span>
+                    At least 8 characters
+                </li>
+                <li id="checkUpper" class="fail">
+                    <span class="check-icon"><i class="fa-solid fa-xmark"></i></span>
+                    At least 1 uppercase letter
+                </li>
+                <li id="checkNumber" class="fail">
+                    <span class="check-icon"><i class="fa-solid fa-xmark"></i></span>
+                    At least 1 number
+                </li>
+                <li id="checkSpecial" class="fail">
+                    <span class="check-icon"><i class="fa-solid fa-xmark"></i></span>
+                    At least 1 special character
+                </li>
+            </ul>
+
+            <div class="password-error-msg" id="passwordErrorMsg"></div>
+        </div>
+
 
         <button type="submit" id="submitBtn">
             <i class="fa-solid fa-user-plus"></i>
@@ -122,8 +259,18 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
     const passwordInput = document.getElementById('password');
     const emailMsg      = document.getElementById('emailMsg');
     const phoneMsg      = document.getElementById('phoneMsg');
-    const passwordMsg   = document.getElementById('passwordMsg');
     const submitBtn     = document.getElementById('submitBtn');
+
+    /* ── Password strength elements ── */
+    const strengthSection = document.getElementById('passwordStrengthSection');
+    const strengthBarFill = document.getElementById('strengthBarFill');
+    const strengthLabel   = document.getElementById('strengthLabel');
+    const checkLen        = document.getElementById('checkLen');
+    const checkUpper      = document.getElementById('checkUpper');
+    const checkNumber     = document.getElementById('checkNumber');
+    const checkSpecial    = document.getElementById('checkSpecial');
+    const passwordErrorMsg = document.getElementById('passwordErrorMsg');
+    const togglePassword  = document.getElementById('togglePassword');
 
     /* ── helpers ── */
     function setMsg(el, input, text, ok) {
@@ -136,6 +283,22 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
         el.textContent = '';
         el.className = 'validation-msg';
         input.classList.remove('valid', 'invalid');
+    }
+
+    /* ── Toggle password visibility ── */
+    togglePassword.addEventListener('click', function () {
+        const type = passwordInput.type === 'password' ? 'text' : 'password';
+        passwordInput.type = type;
+        const icon = this.querySelector('i');
+        icon.className = type === 'password' ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye';
+    });
+
+    /* ── Update checklist item ── */
+    function updateCheck(el, passed) {
+        el.className = passed ? 'pass' : 'fail';
+        el.querySelector('.check-icon').innerHTML = passed
+            ? '<i class="fa-solid fa-check"></i>'
+            : '<i class="fa-solid fa-xmark"></i>';
     }
 
     /* ── email: must end with @gmail.com ── */
@@ -152,7 +315,6 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
 
     /* ── phone: exactly 10 digits ── */
     phoneInput.addEventListener('input', function () {
-        // strip non-digits while typing
         this.value = this.value.replace(/\D/g, '');
         const v = this.value;
         if (v === '') { clearMsg(phoneMsg, this); return; }
@@ -163,22 +325,60 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
         }
     });
 
-    /* ── password: ≥8 chars, 1 uppercase, 1 special char ── */
+    /* ── password: real-time strength + checklist ── */
     passwordInput.addEventListener('input', function () {
         const v = this.value;
-        if (v === '') { clearMsg(passwordMsg, this); return; }
+
+        if (v === '') {
+            strengthSection.style.display = 'none';
+            passwordInput.classList.remove('valid', 'invalid');
+            return;
+        }
+
+        strengthSection.style.display = 'block';
+
         const hasLen     = v.length >= 8;
         const hasUpper   = /[A-Z]/.test(v);
+        const hasNumber  = /[0-9]/.test(v);
         const hasSpecial = /[!@#$%^&*()\-_=+\[\]{};:'",.<>\/?\\|`~]/.test(v);
 
-        if (hasLen && hasUpper && hasSpecial) {
-            setMsg(passwordMsg, this, '✓ Strong password', true);
-        } else {
+        /* Update checklist */
+        updateCheck(checkLen, hasLen);
+        updateCheck(checkUpper, hasUpper);
+        updateCheck(checkNumber, hasNumber);
+        updateCheck(checkSpecial, hasSpecial);
+
+        /* Compute score 0‑4 */
+        const score = [hasLen, hasUpper, hasNumber, hasSpecial].filter(Boolean).length;
+
+        /* Strength bar */
+        const levels = [
+            { width: '0%',   bg: '#94a3b8', label: '',       color: '#94a3b8' },
+            { width: '25%',  bg: '#ef4444', label: 'Weak',   color: '#ef4444' },
+            { width: '50%',  bg: '#f97316', label: 'Fair',   color: '#f97316' },
+            { width: '75%',  bg: '#eab308', label: 'Good',   color: '#eab308' },
+            { width: '100%', bg: '#22c55e', label: 'Strong', color: '#22c55e' },
+        ];
+        const lvl = levels[score];
+        strengthBarFill.style.width = lvl.width;
+        strengthBarFill.style.background = lvl.bg;
+        strengthLabel.textContent = lvl.label;
+        strengthLabel.style.color = lvl.color;
+
+        /* Border color */
+        passwordInput.classList.toggle('valid',   score === 4);
+        passwordInput.classList.toggle('invalid', score < 4);
+
+        /* Error message */
+        if (score < 4) {
             const missing = [];
-            if (!hasLen)     missing.push('at least 8 characters');
-            if (!hasUpper)   missing.push('one uppercase letter');
-            if (!hasSpecial) missing.push('one special character');
-            setMsg(passwordMsg, this, '✗ Needs: ' + missing.join(', '), false);
+            if (!hasLen)     missing.push('Password must be at least 8 characters');
+            if (!hasUpper)   missing.push('Password must contain an uppercase letter');
+            if (!hasNumber)  missing.push('Password must contain a number');
+            if (!hasSpecial) missing.push('Password must contain a special character');
+            passwordErrorMsg.textContent = missing[0]; // show first unmet rule
+        } else {
+            passwordErrorMsg.textContent = '';
         }
     });
 
@@ -187,11 +387,10 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
         const emailOk    = emailRe.test(emailInput.value.trim());
         const phoneOk    = /^\d{10}$/.test(phoneInput.value);
         const pw         = passwordInput.value;
-        const pwOk       = pw.length >= 8 && /[A-Z]/.test(pw) && /[!@#$%^&*()\-_=+\[\]{};:'",.<>\/?\\|`~]/.test(pw);
+        const pwOk       = pw.length >= 8 && /[A-Z]/.test(pw) && /[0-9]/.test(pw) && /[!@#$%^&*()\-_=+\[\]{};:'",.<>\/?\\|`~]/.test(pw);
 
         if (!emailOk || !phoneOk || !pwOk) {
             e.preventDefault();
-            // trigger validations so the user sees what's wrong
             emailInput.dispatchEvent(new Event('input'));
             phoneInput.dispatchEvent(new Event('input'));
             passwordInput.dispatchEvent(new Event('input'));
