@@ -21,7 +21,7 @@ PROCESS_WIDTH = 1920  # resize frames to this width for speed; None = keep origi
 # ---------------------------------------------------------------------------
 # FEATURE TOGGLES — turn each add-on feature on/off
 # ---------------------------------------------------------------------------
-ENABLE_TRACKING = True            # persistent IDs via ByteTrack (model.track)
+ENABLE_TRACKING = False           # False for dense crowd counting (avoids ByteTrack dropping low-conf/untracked people)
 ENABLE_ZONES = False              # zone-based ROI thresholds + exit suggestion
                                    # (off by default — zone polygons assume a
                                    # fixed camera framing, not arbitrary uploads)
@@ -37,9 +37,13 @@ ENABLE_PDF_REPORT = True          # auto-generate session_report.pdf on stop
 # YOLO MODEL
 # ---------------------------------------------------------------------------
 MODEL_PATH = "yolov8m.pt"
-FALLBACK_MODEL_PATH = "yolov8n-face.pt"
-CONFIDENCE_THRESHOLD = 0.25
-IOU_THRESHOLD = 0.8
+FALLBACK_MODEL_PATH = "yolov8n-head.pt"
+HEAD_MODEL_PATH = "yolov8n-head.pt"
+CONFIDENCE_THRESHOLD = 0.08       # 0.08 allows small/distant people in dense crowds (>100 people) to be detected
+IOU_THRESHOLD = 0.7               # NMS IoU threshold for overlapping crowd members
+HEAD_CONFIDENCE_THRESHOLD = 0.25  # Confidence threshold for head detection
+HEAD_IOU_THRESHOLD = 0.6          # IoU threshold for head NMS
+CRITICAL_DISTANCE = 55            # Distance threshold (px) for critical proximity (social distance)
 PERSON_CLASS_ID = 0
 TRACKER_CFG = "bytetrack.yaml"   # bundled with ultralytics
 

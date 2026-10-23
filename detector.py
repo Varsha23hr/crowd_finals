@@ -127,12 +127,17 @@ class CameraWorker(threading.Thread):
                 results = self.model.track(
                     frame, persist=True, tracker=config.TRACKER_CFG,
                     classes=[config.PERSON_CLASS_ID], conf=config.CONFIDENCE_THRESHOLD,
+                    iou=getattr(config, "IOU_THRESHOLD", 0.7),
+                    imgsz=config.PROCESS_WIDTH or 1920,
                     verbose=False,
                 )[0]
             else:
                 results = self.model.predict(
                     frame, classes=[config.PERSON_CLASS_ID],
-                    conf=config.CONFIDENCE_THRESHOLD, verbose=False,
+                    conf=config.CONFIDENCE_THRESHOLD,
+                    iou=getattr(config, "IOU_THRESHOLD", 0.7),
+                    imgsz=config.PROCESS_WIDTH or 1920,
+                    verbose=False,
                 )[0]
 
             boxes = results.boxes

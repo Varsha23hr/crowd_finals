@@ -15,6 +15,7 @@ a finite, uploaded file rather than an infinite live stream.
 
 from sqlalchemy.engine import result
 import json
+import math
 import os
 import threading
 import time
@@ -50,7 +51,7 @@ class VideoJob(threading.Thread):
     """Processes one uploaded video end-to-end in a background thread."""
 
     def __init__(self, job_id: str, filepath: str, original_filename: str,
-                 model: YOLO, bytetrack: bool = True, uploaded_by: str = "Unknown", fallback_model: YOLO = None,
+                 model: YOLO, bytetrack: bool = False, uploaded_by: str = "Unknown", fallback_model: YOLO = None,
                  threshold: int = config.CROWD_THRESHOLD):
         super().__init__(daemon=True)
         self.job_id = job_id
@@ -86,6 +87,7 @@ class VideoJob(threading.Thread):
             "eta_seconds": None,
             "error": None,
         }
+        self._preview_path = os.path.join(config.PROCESSED_DIR, f"{job_id}_preview.jpg")
         _ensure_dirs()
 
     # -- polled by /api/status/<job_id> --------------------------------
@@ -165,7 +167,7 @@ class VideoJob(threading.Thread):
                         frame, persist=True, tracker=config.TRACKER_CFG,
                         classes=[config.PERSON_CLASS_ID], conf=config.CONFIDENCE_THRESHOLD,
                         iou=getattr(config, "IOU_THRESHOLD", 0.7),
-                        imgsz=config.PROCESS_WIDTH or 1280,
+                        imgsz=config.PROCESS_WIDTH or 1920,
                         verbose=False,
                     )[0]
                 else:
@@ -173,26 +175,28 @@ class VideoJob(threading.Thread):
                         frame, classes=[config.PERSON_CLASS_ID],
                         conf=config.CONFIDENCE_THRESHOLD,
                         iou=getattr(config, "IOU_THRESHOLD", 0.7),
-                        imgsz=config.PROCESS_WIDTH or 1280,
+                        imgsz=config.PROCESS_WIDTH or 1920,
                         verbose=False,
                     )[0]
 
                 boxes = results.boxes
-                box_coords = []
-                centroids = []
+                body_boxes = []
+                final_boxes = []  # list of (x1, y1, x2, y2, type) where type is 'body' or 'head'
                 if boxes is not None:
                     for box in boxes:
                         x1, y1, x2, y2 = map(int, box.xyxy[0])
-                        box_coords.append((x1, y1, x2, y2))
-                        centroids.append(((x1 + x2) // 2, (y1 + y2) // 2))
+                        body_boxes.append((x1, y1, x2, y2))
+                        final_boxes.append((x1, y1, x2, y2, 'body'))
 
-                # --- Fallback Head Detection ---
+                # --- Fallback Head Detection (for heads whose body is not detected) ---
                 if getattr(self, "fallback_model", None):
+                    head_conf = getattr(config, "HEAD_CONFIDENCE_THRESHOLD", 0.25)
+                    head_iou = getattr(config, "HEAD_IOU_THRESHOLD", 0.6)
                     results_fb = self.fallback_model.predict(
-                        frame, classes=[config.PERSON_CLASS_ID],
-                        conf=config.CONFIDENCE_THRESHOLD,
-                        iou=getattr(config, "IOU_THRESHOLD", 0.7),
-                        imgsz=config.PROCESS_WIDTH or 1280,
+                        frame,
+                        conf=head_conf,
+                        iou=head_iou,
+                        imgsz=config.PROCESS_WIDTH or 1920,
                         verbose=False,
                     )[0]
                     boxes_fb = results_fb.boxes
@@ -202,25 +206,49 @@ class VideoJob(threading.Thread):
                             fcx, fcy = (fx1 + fx2) // 2, (fy1 + fy2) // 2
                             # Check if head center is inside any primary body box
                             is_inside = False
-                            for (px1, py1, px2, py2) in box_coords:
+                            for (px1, py1, px2, py2) in body_boxes:
                                 if px1 <= fcx <= px2 and py1 <= fcy <= py2:
                                     is_inside = True
                                     break
                             if not is_inside:
-                                box_coords.append((fx1, fy1, fx2, fy2))
-                                centroids.append((fcx, fcy))
-                
-                person_count = len(box_coords)
+                                final_boxes.append((fx1, fy1, fx2, fy2, 'head'))
+
+                box_coords = [(x1, y1, x2, y2) for (x1, y1, x2, y2, _) in final_boxes]
+                centroids = [((x1 + x2) // 2, (y1 + y2) // 2) for (x1, y1, x2, y2, _) in final_boxes]
+                person_count = len(final_boxes)
+
+                # --- Critical & Safe Distance Proximity Analysis ---
+                crit_dist = getattr(config, "CRITICAL_DISTANCE", 55)
+                n_det = len(final_boxes)
+                is_critical = [False] * n_det
+                critical_pairs = []
+                for i in range(n_det):
+                    c1 = centroids[i]
+                    for j in range(i + 1, n_det):
+                        c2 = centroids[j]
+                        dist = math.hypot(c1[0] - c2[0], c1[1] - c2[1])
+                        if dist < crit_dist:
+                            is_critical[i] = True
+                            is_critical[j] = True
+                            critical_pairs.append((c1, c2))
+
                 inference_ms = round((time.time() - infer_start) * 1000, 1)
-                self._last_boxes = box_coords
+                self._last_final_boxes = final_boxes
+                self._last_box_coords = box_coords
+                self._last_centroids = centroids
+                self._last_is_critical = is_critical
+                self._last_critical_pairs = critical_pairs
                 self._last_count = person_count
                 self._last_inference_ms = inference_ms
             else:
                 # Reuse the last detection result to skip frames cheaply.
-                box_coords = getattr(self, "_last_boxes", [])
+                final_boxes = getattr(self, "_last_final_boxes", [])
+                box_coords = getattr(self, "_last_box_coords", [])
+                centroids = getattr(self, "_last_centroids", [])
+                is_critical = getattr(self, "_last_is_critical", [])
+                critical_pairs = getattr(self, "_last_critical_pairs", [])
                 person_count = getattr(self, "_last_count", 0)
                 inference_ms = getattr(self, "_last_inference_ms", 0.0)
-                centroids = [((x1 + x2) // 2, (y1 + y2) // 2) for (x1, y1, x2, y2) in box_coords]
 
             counts_all.append(person_count)
 
@@ -274,33 +302,41 @@ class VideoJob(threading.Thread):
                 row = min(int(cy / cell_h), rows - 1)
                 heatmap_grid[row, col] += 1
 
-            # --- draw overlay ---
-            color = STATUS_COLOR_BGR[status]
-            for (x1, y1, x2, y2) in box_coords:
-                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+            # --- draw overlay: safe/critical bounding boxes, centroid dots, and red proximity lines ---
+            COLOR_SAFE = (0, 220, 0)       # Green (BGR)
+            COLOR_CRITICAL = (0, 0, 255)   # Red (BGR)
 
-            bar_h = 70
-            overlay = frame.copy()
-            cv2.rectangle(overlay, (0, 0), (w, bar_h), (30, 30, 30), -1)
-            cv2.addWeighted(overlay, 0.65, frame, 0.35, 0, frame)
-            cv2.putText(frame, f"People: {person_count}", (14, 28),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2, cv2.LINE_AA)
-            cv2.putText(frame, f"Status: {status}", (14, 54),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2, cv2.LINE_AA)
-            alert_text = "ALERT: OVERCROWDING" if status in ("HIGH", "CRITICAL") else "No active alert"
-            cv2.putText(frame, alert_text, (min(260, w - 280), 28),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                        (68, 68, 239) if status in ("HIGH", "CRITICAL") else (200, 200, 200),
-                        2, cv2.LINE_AA)
+            # 1. Draw connecting red lines between pairs violating critical distance
+            for (c1, c2) in critical_pairs:
+                cv2.line(frame, c1, c2, COLOR_CRITICAL, 1, cv2.LINE_AA)
+
+            # 2. Draw bounding boxes and centroid dots
+            for i, (x1, y1, x2, y2, btype) in enumerate(final_boxes):
+                box_color = COLOR_CRITICAL if (i < len(is_critical) and is_critical[i]) else COLOR_SAFE
+                thickness = 1 if btype == 'head' else 2
+                cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, thickness)
+                cv2.circle(frame, centroids[i], 3, box_color, -1)
+
+            # 3. Clean status & timestamp overlay matching expected visual output
+            status_text = f"Status: {status}"
+            status_color = COLOR_CRITICAL if (status in ("HIGH", "CRITICAL") or any(is_critical)) else COLOR_SAFE
+            cv2.putText(frame, status_text, (20, 35),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.75, status_color, 2, cv2.LINE_AA)
             ts_label = time.strftime("%H:%M:%S", time.gmtime(t_sec))
-            cv2.putText(frame, ts_label, (w - 110, 54),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
-            cv2.circle(frame, (w - 20, 20), 9, color, -1)
+            cv2.putText(frame, ts_label, (w - 110, 35),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.65, (220, 220, 220), 1, cv2.LINE_AA)
 
             if writer is None:
                 writer = cv2.VideoWriter(out_path, fourcc, fps, (w, h))
             writer.write(frame)
             last_good_frame = frame
+
+            # Save latest annotated frame as JPEG for live preview
+            if frame_id % max(config.FRAME_SKIP, 1) == 0:
+                try:
+                    cv2.imwrite(self._preview_path, frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+                except Exception:
+                    pass
 
             # --- per-frame data for live analysis panel ---
             density_pct_frame = min(100, round(100 * person_count / max(self.threshold, 1)))
@@ -446,6 +482,13 @@ class VideoJob(threading.Thread):
 
         if config.ENABLE_PDF_REPORT:
             self._maybe_generate_pdf(result)
+
+        # Clean up preview image
+        try:
+            if os.path.exists(self._preview_path):
+                os.remove(self._preview_path)
+        except Exception:
+            pass
 
         self._update(status="done", progress=100)
 

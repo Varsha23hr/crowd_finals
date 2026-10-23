@@ -252,15 +252,36 @@ function pollJobStatus(jobId) {
 
 function updateProcessingUI(s) {
   const pct = s.progress || 0;
-  document.getElementById("circPct").textContent = pct + "%";
-  const circumference = 327;
-  document.getElementById("circFill").style.strokeDashoffset =
-    circumference - (circumference * pct) / 100;
+
+  // Update progress bar
+  document.getElementById("procProgressFill").style.width = pct + "%";
+  document.getElementById("procProgressPct").textContent = pct + "%";
+
+  // Update stats grid
   document.getElementById("pFrames").textContent = `${s.frames_processed || 0} / ${s.total_frames || 0}`;
   document.getElementById("pCount").textContent = s.current_count || 0;
   document.getElementById("pEta").textContent = s.eta_seconds != null ? `${Math.round(s.eta_seconds)}s` : "—";
   document.getElementById("pStatus").textContent =
     s.status === "processing" ? "Processing" : s.status === "queued" ? "Queued" : s.status;
+
+  // Update live preview image (cache-bust with timestamp)
+  if (s.status === "processing" && currentJobId) {
+    const previewImg = document.getElementById("livePreviewImg");
+    if (previewImg) {
+      const newSrc = `/api/preview/${currentJobId}?t=${Date.now()}`;
+      // Use a temp image to avoid flickering
+      const tmp = new Image();
+      tmp.onload = () => { previewImg.src = tmp.src; };
+      tmp.src = newSrc;
+    }
+  }
+
+  // Update status badge
+  const statusText = document.getElementById("previewStatusText");
+  const badge = document.getElementById("previewBadge");
+  if (statusText) {
+    statusText.textContent = s.status === "processing" ? "Processing" : s.status === "queued" ? "Queued" : s.status;
+  }
 }
 
 // ---------------------------------------------------------------------

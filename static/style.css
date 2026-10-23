@@ -1865,3 +1865,142 @@ a {
   cursor: not-allowed;
   filter: grayscale(1);
 }
+
+/* ========= LIVE PROCESSING PREVIEW ========= */
+.live-preview-container {
+  position: relative;
+  width: 100%;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: #111827;
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.live-preview-img {
+  width: 100%;
+  display: block;
+  object-fit: contain;
+  max-height: 520px;
+  border-radius: var(--radius);
+}
+
+.live-preview-img[src=""] {
+  display: none;
+}
+
+.live-preview-img[src=""]+.preview-overlay-badge {
+  display: none;
+}
+
+.live-preview-container:has(.live-preview-img[src=""])::after {
+  content: "Waiting for first frame…";
+  color: #94A3B8;
+  font-size: 0.9rem;
+  position: absolute;
+}
+
+.preview-overlay-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #fff;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: 0.03em;
+}
+
+.preview-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22C55E;
+  animation: blink-dot 1.2s ease-in-out infinite;
+}
+
+@keyframes blink-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* Processing progress bar */
+.processing-progress-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.processing-progress-track {
+  flex: 1;
+  height: 8px;
+  background: #E2E8F0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.processing-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2563EB, #3B82F6);
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+.processing-progress-pct {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--primary);
+  min-width: 38px;
+  text-align: right;
+}
+
+/* Processing 2x2 stats grid */
+.processing-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.pstat-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pstat-card .pstat-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.pstat-card .pstat-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+@media (max-width: 600px) {
+  .processing-stats-grid {
+    grid-template-columns: 1fr;
+  }
+  .live-preview-img {
+    max-height: 300px;
+  }
+}

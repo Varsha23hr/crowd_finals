@@ -417,6 +417,17 @@ def media_uploads(filename):
     return send_from_directory(config.UPLOAD_DIR, filename)
 
 
+@app.route("/api/preview/<job_id>")
+@login_required
+def api_preview(job_id):
+    """Serve the latest annotated frame as JPEG for live processing preview."""
+    safe_id = secure_filename(job_id)
+    preview_path = os.path.join(config.PROCESSED_DIR, f"{safe_id}_preview.jpg")
+    if not os.path.exists(preview_path):
+        return "", 204  # No content yet
+    return send_file(preview_path, mimetype="image/jpeg")
+
+
 @app.route("/api/frame_data/<job_id>")
 @login_required
 def api_frame_data(job_id):
