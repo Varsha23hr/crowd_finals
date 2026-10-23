@@ -1,3 +1,4 @@
+HEAD
 # Crowd Detection & Overcrowding Analysis System
 
 An authenticated web dashboard that analyzes **uploaded videos** (not live
@@ -124,3 +125,4 @@ and share the traceback if anything errors out.
   `PDF generation skipped: ...` if it's missing.
 - **SMS/Email not sending** → these are off by default except email; check
   console output for `[EMAIL]`/`[SMS]` error lines.
+
