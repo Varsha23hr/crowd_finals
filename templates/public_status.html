@@ -363,7 +363,13 @@
 
   <script>
     const jobId = "{{ job_id or '' }}";
-    const statusApiUrl = jobId ? `/api/public_status/${jobId}` : '/api/public_status';
+    const userId = "{{ user_id or '' }}";
+    let statusApiUrl = '/api/public_status';
+    if (jobId) {
+      statusApiUrl = `/api/public_status/${jobId}`;
+    } else if (userId) {
+      statusApiUrl = `/api/public_status/user/${userId}`;
+    }
 
     const bodyEl = document.body;
     const statusCircle = document.getElementById("statusCircle");

@@ -113,6 +113,7 @@ function fmtDuration(sec) {
 // ---------------------------------------------------------------------
 async function loadDashboardSummary() {
   try {
+    updateDashboardQrWidget();
     const res = await fetch("/api/dashboard_summary");
     const data = await res.json();
     document.getElementById("mVideos").textContent = data.videos_analyzed;

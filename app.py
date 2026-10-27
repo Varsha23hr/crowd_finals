@@ -32,7 +32,7 @@ from werkzeug.utils import secure_filename
 from ultralytics import YOLO
 
 import config
-from auth import verify_credentials, login_required, current_user
+from auth import verify_credentials, login_required, current_user, current_user_id
 from utils.alert_logger import init_log_file
 from video_processor import VideoJob, new_job_id
 from models import (
@@ -40,7 +40,8 @@ from models import (
     User,
     EmergencyContact,
     AlertSetting,
-    AlertHistory
+    AlertHistory,
+    UploadedVideo,
 )
 from utils import alerts
 
@@ -79,14 +80,40 @@ def _allowed_video(filename: str) -> bool:
     return ext in config.ALLOWED_VIDEO_EXTENSIONS
 
 
-def _read_history():
+def _read_history(user_id=None):
     if not os.path.exists(config.HISTORY_FILE):
         return []
     try:
         with open(config.HISTORY_FILE) as f:
-            return json.load(f)
+            history = json.load(f)
     except (json.JSONDecodeError, OSError):
         return []
+
+    # Ensure user_id is populated for records
+    modified = False
+    user_map = {}
+    for item in history:
+        if item.get("user_id") is None:
+            uname = item.get("uploaded_by")
+            if uname:
+                if uname not in user_map:
+                    u = User.query.filter_by(username=uname).first()
+                    user_map[uname] = u.id if u else None
+                if user_map[uname] is not None:
+                    item["user_id"] = user_map[uname]
+                    modified = True
+
+    if modified:
+        try:
+            with open(config.HISTORY_FILE, "w") as f:
+                json.dump(history, f)
+        except Exception:
+            pass
+
+    if user_id is not None:
+        return [h for h in history if h.get("user_id") == user_id]
+
+    return history
 
 
 def _read_analysis(job_id: str):
@@ -94,8 +121,63 @@ def _read_analysis(job_id: str):
     path = os.path.join(config.ANALYSIS_DIR, f"{safe_id}.json")
     if not os.path.exists(path):
         return None
-    with open(path) as f:
-        return json.load(f)
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return None
+
+    # Backfill user_id if missing
+    if data and data.get("user_id") is None:
+        uname = data.get("uploaded_by")
+        if uname:
+            u = User.query.filter_by(username=uname).first()
+            if u:
+                data["user_id"] = u.id
+                try:
+                    with open(path, "w") as f:
+                        json.dump(data, f)
+                except Exception:
+                    pass
+    return data
+
+
+def _get_job_user_id(job_id: str):
+    """Returns the user_id associated with a job_id, or None."""
+    safe_id = secure_filename(job_id)
+    # 1. Check active jobs
+    job = _active_jobs.get(safe_id)
+    if job and getattr(job, "user_id", None) is not None:
+        return job.user_id
+
+    # 2. Check analysis file
+    analysis = _read_analysis(safe_id)
+    if analysis and analysis.get("user_id") is not None:
+        return analysis["user_id"]
+
+    # 3. Check history
+    for item in _read_history(user_id=None):
+        if item.get("job_id") == safe_id and item.get("user_id") is not None:
+            return item["user_id"]
+
+    # 4. Check DB
+    try:
+        rec = UploadedVideo.query.filter_by(job_id=safe_id).first()
+        if rec and rec.user_id:
+            return rec.user_id
+    except Exception:
+        pass
+
+    return None
+
+
+def _job_belongs_to_current_user(job_id: str) -> bool:
+    """Verifies whether job_id was uploaded by the currently logged-in user."""
+    uid = current_user_id()
+    if not uid:
+        return False
+    job_uid = _get_job_user_id(job_id)
+    return job_uid == uid
 
 
 # ---------------------------------------------------------------------------
@@ -236,6 +318,7 @@ def login():
         if user:
 
             session["user"] = user.username
+            session["user_id"] = user.id
 
             return redirect(url_for("index"))
 
@@ -335,8 +418,27 @@ def api_upload():
     if threshold is None:
         threshold = config.CROWD_THRESHOLD
 
+    user_id = current_user_id()
+    username = current_user()
+
+    # Save to UploadedVideo database table
+    try:
+        video_rec = UploadedVideo(
+            job_id=job_id,
+            user_id=user_id,
+            original_filename=file.filename,
+            stored_filename=stored_name,
+            upload_path=save_path,
+            status="queued",
+            threshold=threshold,
+        )
+        db.session.add(video_rec)
+        db.session.commit()
+    except Exception as db_err:
+        print(f"[UPLOAD] Warning: could not save UploadedVideo to DB: {db_err}")
+
     job = VideoJob(job_id, save_path, file.filename, _shared_model, fallback_model=_shared_fallback_model,
-                    uploaded_by=current_user(), threshold=threshold)
+                    uploaded_by=username, user_id=user_id, threshold=threshold)
     _active_jobs[job_id] = job
     job.start()
 
@@ -346,6 +448,9 @@ def api_upload():
 @app.route("/api/status/<job_id>")
 @login_required
 def api_status(job_id):
+    if not _job_belongs_to_current_user(job_id):
+        return jsonify({"error": "Unauthorized"}), 403
+
     job = _active_jobs.get(job_id)
     if job is not None:
         status = job.get_status()
@@ -363,6 +468,9 @@ def api_status(job_id):
 @app.route("/api/analysis/<job_id>")
 @login_required
 def api_analysis(job_id):
+    if not _job_belongs_to_current_user(job_id):
+        return jsonify({"error": "Unauthorized"}), 403
+
     analysis = _read_analysis(job_id)
     if not analysis:
         return jsonify({"error": "Analysis not found (still processing or invalid id)."}), 404
@@ -372,13 +480,13 @@ def api_analysis(job_id):
 @app.route("/api/history")
 @login_required
 def api_history():
-    return jsonify(_read_history())
+    return jsonify(_read_history(user_id=current_user_id()))
 
 
 @app.route("/api/dashboard_summary")
 @login_required
 def api_dashboard_summary():
-    history = _read_history()
+    history = _read_history(user_id=current_user_id())
     videos_analyzed = len(history)
     max_crowd = max((h["max_count"] for h in history), default=0)
     avg_crowd = round(sum(h["avg_count"] for h in history) / videos_analyzed, 1) if videos_analyzed else 0
@@ -398,24 +506,36 @@ def api_dashboard_summary():
 @app.route("/media/processed/<path:filename>")
 @login_required
 def media_processed(filename):
+    job_id = filename.split(".")[0].split("_")[0]
+    if not _job_belongs_to_current_user(job_id):
+        return jsonify({"error": "Unauthorized"}), 403
     return send_from_directory(config.PROCESSED_DIR, filename)
 
 
 @app.route("/media/keyframes/<path:filename>")
 @login_required
 def media_keyframes(filename):
+    job_id = filename.split("_")[0]
+    if not _job_belongs_to_current_user(job_id):
+        return jsonify({"error": "Unauthorized"}), 403
     return send_from_directory(config.KEYFRAME_DIR, filename)
 
 
 @app.route("/media/heatmaps/<path:filename>")
 @login_required
 def media_heatmaps(filename):
+    job_id = filename.split(".")[0]
+    if not _job_belongs_to_current_user(job_id):
+        return jsonify({"error": "Unauthorized"}), 403
     return send_from_directory(config.HEATMAP_DIR, filename)
 
 
 @app.route("/media/uploads/<path:filename>")
 @login_required
 def media_uploads(filename):
+    job_id = filename.split("_")[0]
+    if not _job_belongs_to_current_user(job_id):
+        return jsonify({"error": "Unauthorized"}), 403
     return send_from_directory(config.UPLOAD_DIR, filename)
 
 
@@ -423,6 +543,8 @@ def media_uploads(filename):
 @login_required
 def api_preview(job_id):
     """Serve the latest annotated frame as JPEG for live processing preview."""
+    if not _job_belongs_to_current_user(job_id):
+        return "", 403
     safe_id = secure_filename(job_id)
     preview_path = os.path.join(config.PROCESSED_DIR, f"{safe_id}_preview.jpg")
     if not os.path.exists(preview_path):
@@ -433,6 +555,8 @@ def api_preview(job_id):
 @app.route("/api/frame_data/<job_id>")
 @login_required
 def api_frame_data(job_id):
+    if not _job_belongs_to_current_user(job_id):
+        return jsonify({"error": "Unauthorized"}), 403
     safe_id = secure_filename(job_id)
     path = os.path.join(config.ANALYSIS_DIR, f"{safe_id}_frames.json")
     if not os.path.exists(path):
@@ -446,6 +570,8 @@ def api_frame_data(job_id):
 @app.route("/api/report/pdf/<job_id>")
 @login_required
 def report_pdf(job_id):
+    if not _job_belongs_to_current_user(job_id):
+        return jsonify({"error": "Unauthorized"}), 403
     safe_id = secure_filename(job_id)
     path = os.path.join(config.REPORT_DIR, f"{safe_id}.pdf")
     if not os.path.exists(path):
@@ -457,6 +583,8 @@ def report_pdf(job_id):
 @app.route("/api/report/csv/<job_id>")
 @login_required
 def report_csv(job_id):
+    if not _job_belongs_to_current_user(job_id):
+        return jsonify({"error": "Unauthorized"}), 403
     analysis = _read_analysis(job_id)
     if not analysis:
         return jsonify({"error": "Analysis not found."}), 404
@@ -481,6 +609,8 @@ def report_csv(job_id):
 @app.route("/api/report/excel/<job_id>")
 @login_required
 def report_excel(job_id):
+    if not _job_belongs_to_current_user(job_id):
+        return jsonify({"error": "Unauthorized"}), 403
     analysis = _read_analysis(job_id)
     if not analysis:
         return jsonify({"error": "Analysis not found."}), 404
@@ -668,10 +798,10 @@ def get_public_base_url():
     return f"http://{lan_ip}:{port}"
 
 
-def get_crowd_status_data(job_id=None):
+def get_crowd_status_data(job_id=None, user_id=None):
     """
     Retrieves latest crowd safety data for an active or completed job,
-    or the most recent analysis if job_id is omitted.
+    or the most recent analysis for user_id if job_id is omitted.
     """
     active_job = None
     analysis = None
@@ -696,17 +826,21 @@ def get_crowd_status_data(job_id=None):
                         break
             else:
                 target_job_id = safe_id
-    else:
-        # Default: pick active job if running
-        if _active_jobs:
-            target_job_id = list(_active_jobs.keys())[-1]
-            active_job = _active_jobs[target_job_id]
-        else:
-            # Pick most recent from history
-            history = _read_history()
-            if history:
-                target_job_id = history[0]["job_id"]
+    elif user_id is not None:
+        # Check active jobs for this user
+        for jid, j in reversed(list(_active_jobs.items())):
+            if getattr(j, "user_id", None) == user_id:
+                target_job_id = jid
+                active_job = j
+                break
+        if not active_job:
+            user_history = _read_history(user_id=user_id)
+            if user_history:
+                target_job_id = user_history[0]["job_id"]
                 analysis = _read_analysis(target_job_id)
+    else:
+        # Neither job_id nor user_id provided
+        pass
 
     # Extract crowd figures
     if active_job:
@@ -714,23 +848,29 @@ def get_crowd_status_data(job_id=None):
         current_count = status_info.get("current_count", 0)
         safe_capacity = getattr(active_job, "threshold", config.CROWD_THRESHOLD) or config.CROWD_THRESHOLD
         is_live = True
+        video_filename = getattr(active_job, "original_filename", "")
     elif analysis:
         summary = analysis.get("summary", {})
         current_count = summary.get("max_count", 0)
         safe_capacity = summary.get("threshold", config.CROWD_THRESHOLD) or config.CROWD_THRESHOLD
         is_live = False
+        video_filename = analysis.get('original_filename', '')
     else:
-        # Baseline fallback
+        # Baseline fallback when no video exists for this user
         current_count = 0
         safe_capacity = config.CROWD_THRESHOLD
         is_live = False
+        video_filename = "No video uploaded yet"
 
     safe_capacity = max(1, int(safe_capacity))
     current_count = int(current_count)
     occupancy_pct = round((current_count / safe_capacity) * 100, 1)
 
     # Classify status (SAFE / WARNING / CRITICAL)
-    if current_count >= safe_capacity:
+    if not active_job and not analysis:
+        status = "SAFE"
+        message = "No video analysis active. Upload a video to monitor crowd safety."
+    elif current_count >= safe_capacity:
         status = "CRITICAL"
         message = "Please do not enter. The crowd level has exceeded the safe capacity."
     elif current_count >= round(safe_capacity * 0.7):
@@ -746,6 +886,7 @@ def get_crowd_status_data(job_id=None):
 
     return {
         "job_id": target_job_id or job_id or "",
+        "user_id": user_id,
         "status": status,
         "current_people": current_count,
         "current_count": current_count,
@@ -756,21 +897,25 @@ def get_crowd_status_data(job_id=None):
         "message": message,
         "is_active": is_live,
         "is_live": is_live,
-        "video_filename": (active_job.original_filename if active_job else (analysis.get('original_filename') if analysis else "")),
+        "video_filename": video_filename,
     }
 
 
 @app.route("/public")
 @app.route("/public/<job_id>")
-def public_crowd_status(job_id=None):
+@app.route("/public/user/<int:user_id>")
+def public_crowd_status(job_id=None, user_id=None):
     """
     Public Crowd Safety Status webpage accessible via mobile phone QR scan.
     No login required.
     """
-    data = get_crowd_status_data(job_id)
+    if user_id is None and not job_id and session.get("user_id"):
+        user_id = session.get("user_id")
+    data = get_crowd_status_data(job_id=job_id, user_id=user_id)
     return render_template(
         "public_status.html",
-        job_id=data["job_id"],
+        job_id=data.get("job_id", ""),
+        user_id=user_id or data.get("user_id", ""),
         initial_status=data["status"],
         initial_count=data["current_people"],
         initial_capacity=data["safe_capacity"],
@@ -782,19 +927,32 @@ def public_crowd_status(job_id=None):
 
 @app.route("/api/public_status")
 @app.route("/api/public_status/<job_id>")
-def api_public_status(job_id=None):
+@app.route("/api/public_status/user/<int:user_id>")
+def api_public_status(job_id=None, user_id=None):
     """JSON API endpoint for the public page to auto-refresh crowd metrics."""
-    data = get_crowd_status_data(job_id)
+    if user_id is None and not job_id and session.get("user_id"):
+        user_id = session.get("user_id")
+    data = get_crowd_status_data(job_id=job_id, user_id=user_id)
     return jsonify(data)
 
 
 @app.route("/api/qr_code")
 @app.route("/api/qr_code/<job_id>")
-def api_qr_code(job_id=None):
+@app.route("/api/qr_code/user/<int:user_id>")
+def api_qr_code(job_id=None, user_id=None):
     """Generates a dynamic QR code PNG pointing to the public crowd status URL."""
     base_url = get_public_base_url()
     if job_id:
         target_url = f"{base_url}/public/{job_id}"
+    elif user_id:
+        target_url = f"{base_url}/public/user/{user_id}"
+    elif session.get("user_id"):
+        uid = session.get("user_id")
+        user_data = get_crowd_status_data(user_id=uid)
+        if user_data.get("job_id"):
+            target_url = f"{base_url}/public/{user_data['job_id']}"
+        else:
+            target_url = f"{base_url}/public/user/{uid}"
     else:
         target_url = f"{base_url}/public"
 
@@ -819,23 +977,34 @@ def api_qr_code(job_id=None):
 def api_public_info(job_id=None):
     """Returns URL and metadata for sharing / displaying QR codes on the dashboard."""
     base_url = get_public_base_url()
+    uid = current_user_id()
+
     if job_id:
+        if uid and not _job_belongs_to_current_user(job_id):
+            return jsonify({"error": "Unauthorized"}), 403
         public_url = f"{base_url}/public/{job_id}"
         qr_url = f"/api/qr_code/{job_id}"
+        info_data = get_crowd_status_data(job_id=job_id, user_id=uid)
     else:
-        public_url = f"{base_url}/public"
-        qr_url = "/api/qr_code"
-
-    # Get video filename for display
-    info_data = get_crowd_status_data(job_id)
-    video_filename = info_data.get('video_filename', '')
+        info_data = get_crowd_status_data(user_id=uid)
+        target_job_id = info_data.get("job_id")
+        if target_job_id:
+            public_url = f"{base_url}/public/{target_job_id}"
+            qr_url = f"/api/qr_code/{target_job_id}"
+        elif uid:
+            public_url = f"{base_url}/public/user/{uid}"
+            qr_url = f"/api/qr_code/user/{uid}"
+        else:
+            public_url = f"{base_url}/public"
+            qr_url = "/api/qr_code"
 
     return jsonify({
         "public_url": public_url,
         "qr_code_url": qr_url,
-        "job_id": job_id or "",
+        "job_id": info_data.get("job_id", ""),
+        "user_id": uid,
         "lan_ip": get_lan_ip(),
-        "video_filename": video_filename,
+        "video_filename": info_data.get('video_filename', ''),
     })
 
 

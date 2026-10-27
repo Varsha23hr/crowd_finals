@@ -115,3 +115,42 @@ class User(db.Model):
     def clear_otp(self):
         self.otp = None
         self.otp_expiry = None
+
+
+class UploadedVideo(db.Model):
+    __tablename__ = 'uploaded_videos'
+
+    id = db.Column(db.Integer, primary_key=True)
+    job_id = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    original_filename = db.Column(db.String(255), nullable=False)
+    stored_filename = db.Column(db.String(255), nullable=False)
+    upload_path = db.Column(db.String(500))
+    status = db.Column(db.String(30), default='queued')  # queued, processing, done, error
+    processed_at = db.Column(db.DateTime, default=datetime.utcnow)
+    duration_sec = db.Column(db.Float, default=0.0)
+    max_count = db.Column(db.Integer, default=0)
+    avg_count = db.Column(db.Float, default=0.0)
+    total_alerts = db.Column(db.Integer, default=0)
+    overall_risk = db.Column(db.String(20), default='SAFE')
+    threshold = db.Column(db.Integer, default=20)
+
+    user = db.relationship('User', backref=db.backref('uploaded_videos', lazy=True, order_by='UploadedVideo.processed_at.desc()'))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'job_id': self.job_id,
+            'user_id': self.user_id,
+            'original_filename': self.original_filename,
+            'stored_filename': self.stored_filename,
+            'status': self.status,
+            'processed_at': self.processed_at.isoformat() if self.processed_at else None,
+            'duration_sec': self.duration_sec,
+            'max_count': self.max_count,
+            'avg_count': self.avg_count,
+            'total_alerts': self.total_alerts,
+            'overall_risk': self.overall_risk,
+            'threshold': self.threshold,
+        }
+

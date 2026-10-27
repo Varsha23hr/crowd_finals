@@ -51,7 +51,8 @@ class VideoJob(threading.Thread):
     """Processes one uploaded video end-to-end in a background thread."""
 
     def __init__(self, job_id: str, filepath: str, original_filename: str,
-                 model: YOLO, bytetrack: bool = False, uploaded_by: str = "Unknown", fallback_model: YOLO = None,
+                 model: YOLO, bytetrack: bool = False, uploaded_by: str = "Unknown",
+                 user_id: int = None, fallback_model: YOLO = None,
                  threshold: int = config.CROWD_THRESHOLD):
         super().__init__(daemon=True)
         self.job_id = job_id
@@ -62,6 +63,7 @@ class VideoJob(threading.Thread):
         self._last_realtime_alert_t = -999  # cooldown tracker for real-time alerts
         self.bytetrack = bytetrack
         self.uploaded_by = uploaded_by
+        self.user_id = user_id
         self.threshold = threshold
         self.auto_calibrate = (threshold == 0)
         
@@ -112,6 +114,16 @@ class VideoJob(threading.Thread):
         except Exception as exc:  # keep the worker thread from dying silently
             self._update(status="error", error=str(exc))
             print(f"[VideoJob {self.job_id}] ERROR: {exc}")
+            try:
+                from app import app
+                from models import db, UploadedVideo
+                with app.app_context():
+                    rec = UploadedVideo.query.filter_by(job_id=self.job_id).first()
+                    if rec:
+                        rec.status = "error"
+                        db.session.commit()
+            except Exception:
+                pass
 
     def _process(self):
         self._update(status="processing")
@@ -440,6 +452,7 @@ class VideoJob(threading.Thread):
 
         result = {
             "job_id": self.job_id,
+            "user_id": self.user_id,
             "original_filename": self.original_filename,
             "uploaded_by": self.uploaded_by,
             "processed_at": datetime.now().isoformat(timespec="seconds"),
@@ -482,6 +495,24 @@ class VideoJob(threading.Thread):
 
         if config.ENABLE_PDF_REPORT:
             self._maybe_generate_pdf(result)
+
+        # Update database record if exists
+        try:
+            from app import app
+            from models import db, UploadedVideo
+            with app.app_context():
+                rec = UploadedVideo.query.filter_by(job_id=self.job_id).first()
+                if rec:
+                    rec.status = "done"
+                    rec.max_count = result["summary"]["max_count"]
+                    rec.avg_count = result["summary"]["avg_count"]
+                    rec.total_alerts = result["summary"]["total_alerts"]
+                    rec.overall_risk = result["summary"]["overall_risk"]
+                    rec.duration_sec = result["video"]["duration_sec"]
+                    rec.processed_at = datetime.utcnow()
+                    db.session.commit()
+        except Exception as db_err:
+            print(f"[VideoJob] Warning updating DB record: {db_err}")
 
         # Clean up preview image
         try:
@@ -553,6 +584,7 @@ class VideoJob(threading.Thread):
                 history = []
         history.insert(0, {
             "job_id": result["job_id"],
+            "user_id": result.get("user_id"),
             "original_filename": result["original_filename"],
             "uploaded_by": result["uploaded_by"],
             "processed_at": result["processed_at"],
