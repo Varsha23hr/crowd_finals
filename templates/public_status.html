@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Crowd Safety Status - Public Advisory</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f8fafc;
+      color: #0f172a;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 32px 18px 48px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 410px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* Top Brand / Header */
+    .brand-icon {
+      width: 58px;
+      height: 58px;
+      background: #0f172a;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+      margin-bottom: 16px;
+    }
+
+    .brand-icon svg {
+      width: 32px;
+      height: 32px;
+      fill: none;
+    }
+
+    .page-title {
+      font-size: 1.45rem;
+      font-weight: 800;
+      color: #0f172a;
+      letter-spacing: -0.02em;
+      margin-bottom: 4px;
+      text-align: center;
+    }
+
+    .page-subtitle {
+      font-size: 0.88rem;
+      font-weight: 500;
+      color: #64748b;
+      margin-bottom: 24px;
+      text-align: center;
+    }
+
+    /* Main Status Card */
+    .status-card {
+      width: 100%;
+      background: #ffffff;
+      border-radius: 26px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 10px 30px -5px rgba(15, 23, 42, 0.05), 0 4px 12px -2px rgba(15, 23, 42, 0.03);
+      padding: 34px 22px 28px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transition: all 0.3s ease;
+    }
+
+    /* Circular Status Badge */
+    .status-circle-wrap {
+      margin-bottom: 20px;
+      position: relative;
+    }
+
+    .status-circle {
+      width: 136px;
+      height: 136px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.15rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      transition: all 0.35s ease;
+      box-sizing: border-box;
+    }
+
+    /* Status Circle Themes */
+    .theme-CRITICAL .status-circle {
+      border: 5px solid #ef4444;
+      color: #dc2626;
+      background: #fef2f2;
+      box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.08);
+    }
+
+    .theme-WARNING .status-circle {
+      border: 5px solid #f59e0b;
+      color: #d97706;
+      background: #fffbeb;
+      box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.08);
+    }
+
+    .theme-SAFE .status-circle {
+      border: 5px solid #10b981;
+      color: #059669;
+      background: #f0fdf4;
+      box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.08);
+    }
+
+    /* Status Title */
+    .status-heading {
+      font-size: 1.5rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+      text-align: center;
+      transition: color 0.3s ease;
+    }
+
+    .theme-CRITICAL .status-heading { color: #dc2626; }
+    .theme-WARNING .status-heading { color: #d97706; }
+    .theme-SAFE .status-heading { color: #059669; }
+
+    /* Advisory message */
+    .status-message {
+      font-size: 0.94rem;
+      line-height: 1.45;
+      color: #475569;
+      text-align: center;
+      max-width: 290px;
+      margin-bottom: 28px;
+      min-height: 42px;
+    }
+
+    /* 2x2 Grid */
+    .metrics-grid {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .metric-box {
+      background: #f8fafc;
+      border: 1px solid #f1f5f9;
+      border-radius: 18px;
+      padding: 16px 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    .metric-label {
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: #64748b;
+      margin-bottom: 6px;
+    }
+
+    .metric-value {
+      font-size: 1.45rem;
+      font-weight: 800;
+      color: #0f172a;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+    }
+
+    .metric-value.small-text {
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+
+    /* Live pulse indicator */
+    .live-status-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 24px;
+      margin-bottom: 16px;
+      color: #64748b;
+      font-size: 0.84rem;
+      font-weight: 500;
+    }
+
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      position: relative;
+    }
+
+    .pulse-dot::after {
+      content: '';
+      position: absolute;
+      top: -3px;
+      left: -3px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: rgba(16, 185, 129, 0.4);
+      animation: pulse 1.8s infinite cubic-bezier(0.4, 0, 0.6, 1);
+    }
+
+    @keyframes pulse {
+      0% {
+        transform: scale(0.8);
+        opacity: 0.9;
+      }
+      100% {
+        transform: scale(2.2);
+        opacity: 0;
+      }
+    }
+
+    /* Bottom advisory box */
+    .advisory-box {
+      width: 100%;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 20px;
+      padding: 16px 20px;
+      text-align: center;
+    }
+
+    .advisory-text {
+      font-size: 0.81rem;
+      line-height: 1.5;
+      color: #64748b;
+    }
+
+    /* Connection offline toast */
+    .connection-status {
+      position: fixed;
+      bottom: 12px;
+      background: #1e293b;
+      color: #f8fafc;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 100;
+    }
+    .connection-status.active {
+      display: flex;
+    }
+  </style>
+</head>
+<body class="theme-{{ initial_status|default('SAFE') }}">
+
+  <div class="container">
+    <!-- Center Brand Icon -->
+    <div class="brand-icon">
+      <svg viewBox="0 0 24 24">
+        <!-- Two crowd silhouettes icon -->
+        <circle cx="9" cy="8" r="3.2" fill="#38bdf8"/>
+        <path d="M3 18c0-3.2 2.6-5.8 5.8-5.8s5.8 2.6 5.8 5.8" stroke="#38bdf8" stroke-width="2.2" stroke-linecap="round"/>
+        <circle cx="16.5" cy="8.5" r="2.5" fill="#38bdf8" opacity="0.85"/>
+        <path d="M14 17.5c.8-2 2.6-3.4 4.8-3.4 1.2 0 2.2.4 3 1.1" stroke="#38bdf8" stroke-width="2.2" stroke-linecap="round" opacity="0.85"/>
+      </svg>
+    </div>
+
+    <!-- Title & Subtitle -->
+    <h1 class="page-title">Crowd Safety Status</h1>
+    <div class="page-subtitle">AI-powered public safety advisory</div>
+    
+    <p class="video-filename" id="videoFilename">Video: {{ video_filename|default('') }}</p>
+    
+    <!-- Main Card -->
+    <div class="status-card" id="statusCard">
+      <!-- Circle Badge -->
+      <div class="status-circle-wrap">
+        <div class="status-circle" id="statusCircle">
+          {{ initial_status|default('SAFE') }}
+        </div>
+      </div>
+
+      <!-- Status Heading -->
+      <div class="status-heading" id="statusHeading">
+        {{ initial_status|default('SAFE') }}
+      </div>
+
+      <!-- Safety Message -->
+      <div class="status-message" id="statusMessage">
+        {% if initial_status == 'CRITICAL' %}
+          Please do not enter. The crowd level has exceeded the safe capacity.
+        {% elif initial_status == 'WARNING' %}
+          Caution advised. High crowd density detected. Please follow staff instructions.
+        {% else %}
+          Normal crowd density. Entry permitted. Please proceed safely.
+        {% endif %}
+      </div>
+
+      <!-- 2x2 Grid -->
+      <div class="metrics-grid">
+        <div class="metric-box">
+          <div class="metric-label">Current People</div>
+          <div class="metric-value" id="valCurrentCount">{{ initial_count|default(0) }}</div>
+        </div>
+
+        <div class="metric-box">
+          <div class="metric-label">Safe Capacity</div>
+          <div class="metric-value" id="valSafeCapacity">{{ initial_capacity|default(20) }}</div>
+        </div>
+
+        <div class="metric-box">
+          <div class="metric-label">Occupancy</div>
+          <div class="metric-value" id="valOccupancy">{{ initial_occupancy|default('0.0%') }}</div>
+        </div>
+
+        <div class="metric-box">
+          <div class="metric-label">Last Updated</div>
+          <div class="metric-value small-text" id="valLastUpdated">{{ initial_time|default('--:--:--') }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live indicator -->
+    <div class="live-status-row">
+      <span class="pulse-dot"></span>
+      <span id="liveStatusText">Live analysis active</span>
+    </div>
+
+    <!-- Bottom advisory box -->
+    <div class="advisory-box">
+      <p class="advisory-text">
+        This page provides an AI-based crowd safety advisory. Please follow security staff instructions and emergency procedures.
+      </p>
+    </div>
+  </div>
+
+  <div class="connection-status" id="connectionStatus">
+    <span>●</span> Reconnecting to live feed...
+  </div>
+
+  <script>
+    const jobId = "{{ job_id or '' }}";
+    const statusApiUrl = jobId ? `/api/public_status/${jobId}` : '/api/public_status';
+
+    const bodyEl = document.body;
+    const statusCircle = document.getElementById("statusCircle");
+    const statusHeading = document.getElementById("statusHeading");
+    const statusMessage = document.getElementById("statusMessage");
+    const valCurrentCount = document.getElementById("valCurrentCount");
+    const valSafeCapacity = document.getElementById("valSafeCapacity");
+    const valOccupancy = document.getElementById("valOccupancy");
+    const valLastUpdated = document.getElementById("valLastUpdated");
+    const liveStatusText = document.getElementById("liveStatusText");
+    const connectionStatus = document.getElementById("connectionStatus");
+
+    let isFetching = false;
+    let failCount = 0;
+
+    const SAFETY_MESSAGES = {
+      CRITICAL: "Please do not enter. The crowd level has exceeded the safe capacity.",
+      WARNING: "Caution advised. High crowd density detected. Please follow staff instructions.",
+      SAFE: "Normal crowd density. Entry permitted. Please proceed safely."
+    };
+
+    async function fetchLatestStatus() {
+      if (isFetching) return;
+      isFetching = true;
+      try {
+        const res = await fetch(statusApiUrl + '?_t=' + Date.now());
+        if (!res.ok) throw new Error("Network response was not ok");
+        const data = await res.json();
+        failCount = 0;
+        connectionStatus.classList.remove("active");
+
+        // Status class & text
+        const status = data.status || "SAFE";
+        bodyEl.className = "theme-" + status;
+        statusCircle.textContent = status;
+        statusHeading.textContent = status;
+
+        // Custom or standard message
+        statusMessage.textContent = data.message || SAFETY_MESSAGES[status] || SAFETY_MESSAGES.SAFE;
+
+        // Metrics
+        valCurrentCount.textContent = data.current_people !== undefined ? data.current_people : (data.current_count ?? 0);
+        valSafeCapacity.textContent = data.safe_capacity !== undefined ? data.safe_capacity : (data.threshold ?? 20);
+        valOccupancy.textContent = (data.occupancy_percentage !== undefined ? data.occupancy_percentage : (data.occupancy_pct ?? '0')) + '%';
+        valLastUpdated.textContent = data.last_updated || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+        if (data.is_active === false && !data.is_live) {
+          liveStatusText.textContent = "Analysis recorded";
+        } else {
+          liveStatusText.textContent = "Live analysis active";
+        }
+
+      } catch (err) {
+        failCount++;
+        if (failCount > 2) {
+          connectionStatus.classList.add("active");
+        }
+      } finally {
+        isFetching = false;
+      }
+    }
+
+    // Initial immediate fetch & repeat every 2 seconds
+    fetchLatestStatus();
+    setInterval(fetchLatestStatus, 2000);
+  </script>
+</body>
+</html>

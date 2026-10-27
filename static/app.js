@@ -224,6 +224,19 @@ function uploadVideo(file) {
     const data = JSON.parse(xhr.responseText);
     currentJobId = data.job_id;
     document.getElementById("processingCard").hidden = false;
+    // Fetch QR code URL and video filename for this job
+    fetch(`/api/public_info/${data.job_id}`)
+      .then(r => r.json())
+      .then(info => {
+        const qrImg = document.getElementById('processingQrImg');
+        qrImg.src = info.qr_code_url;
+        document.getElementById('processingQrBox').hidden = false;
+        if (info.video_filename) {
+          const fnElem = document.getElementById('processingVideoFilename');
+          if (fnElem) fnElem.textContent = `Video: ${info.video_filename}`;
+        }
+      })
+      .catch(e => console.error('Failed to load QR info', e));
     pollJobStatus(data.job_id);
   };
   xhr.onerror = () => alert("Upload failed — please try again.");
@@ -1022,8 +1035,145 @@ document.getElementById("historySearch").addEventListener("input", e => {
 });
 
 // ---------------------------------------------------------------------
+// Public Crowd Safety QR Code & Modal System
+// ---------------------------------------------------------------------
+let publicInfoCache = null;
+
+async function fetchPublicInfo(jobId = null) {
+  const url = jobId ? `/api/public_info/${jobId}` : `/api/public_info`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("Failed to fetch public info");
+    return await res.json();
+  } catch (err) {
+    console.error("Public info fetch error:", err);
+    return null;
+  }
+}
+
+async function updateDashboardQrWidget() {
+  const info = await fetchPublicInfo();
+  if (!info) return;
+  publicInfoCache = info;
+
+  const urlText = document.getElementById("dashPublicUrlText");
+  const openLink = document.getElementById("dashOpenPublicLink");
+  const dlLink = document.getElementById("dashDownloadQrLink");
+  const qrImg = document.getElementById("dashQrImg");
+
+  if (urlText) urlText.textContent = info.public_url;
+  if (openLink) openLink.href = info.public_url;
+  if (dlLink) dlLink.href = info.qr_code_url;
+  if (qrImg) qrImg.src = info.qr_code_url + "?_t=" + Date.now();
+}
+
+async function openQrModal(jobId = null) {
+  const backdrop = document.getElementById("qrModalBackdrop");
+  if (!backdrop) return;
+
+  const modalImg = document.getElementById("modalQrImg");
+  const modalUrlText = document.getElementById("modalQrUrlText");
+  const modalOpenBtn = document.getElementById("modalOpenUrlBtn");
+  const modalDlBtn = document.getElementById("modalDownloadQrBtn");
+
+  modalUrlText.textContent = "Generating QR Code...";
+  backdrop.hidden = false;
+
+  const info = await fetchPublicInfo(jobId);
+  if (!info) {
+    modalUrlText.textContent = "Could not load public URL";
+    return;
+  }
+
+  modalUrlText.textContent = info.public_url;
+  modalImg.src = info.qr_code_url + "?_t=" + Date.now();
+  modalOpenBtn.href = info.public_url;
+  modalDlBtn.href = info.qr_code_url;
+}
+
+function closeQrModal() {
+  const backdrop = document.getElementById("qrModalBackdrop");
+  if (backdrop) backdrop.hidden = true;
+}
+
+function setupQrCodeHandlers() {
+  // Topbar open button
+  const topbarBtn = document.getElementById("openQrModalBtn");
+  if (topbarBtn) {
+    topbarBtn.addEventListener("click", () => openQrModal(currentJobId));
+  }
+
+  // Dashboard card thumbnail click
+  const dashThumb = document.getElementById("dashQrThumbnail");
+  if (dashThumb) {
+    dashThumb.addEventListener("click", () => openQrModal(null));
+  }
+
+  // Analysis page QR button
+  const analysisQrBtn = document.getElementById("analysisQrBtn");
+  if (analysisQrBtn) {
+    analysisQrBtn.addEventListener("click", () => openQrModal(currentJobId));
+  }
+
+  // Modal close buttons
+  const closeBtn = document.getElementById("closeQrModalBtn");
+  if (closeBtn) {
+    closeBtn.addEventListener("click", closeQrModal);
+  }
+
+  const backdrop = document.getElementById("qrModalBackdrop");
+  if (backdrop) {
+    backdrop.addEventListener("click", (e) => {
+      if (e.target === backdrop) closeQrModal();
+    });
+  }
+
+  // Copy buttons
+  const copyDashBtn = document.getElementById("copyPublicUrlBtn");
+  if (copyDashBtn) {
+    copyDashBtn.addEventListener("click", () => {
+      const url = document.getElementById("dashPublicUrlText")?.textContent;
+      if (url) {
+        navigator.clipboard.writeText(url).then(() => {
+          const label = document.getElementById("copyBtnLabel");
+          if (label) {
+            const old = label.textContent;
+            label.textContent = "Copied!";
+            setTimeout(() => { label.textContent = old; }, 2000);
+          }
+        });
+      }
+    });
+  }
+
+  const copyModalBtn = document.getElementById("modalCopyUrlBtn");
+  if (copyModalBtn) {
+    copyModalBtn.addEventListener("click", () => {
+      const url = document.getElementById("modalQrUrlText")?.textContent;
+      if (url && url !== "Loading..." && url !== "Generating QR Code...") {
+        navigator.clipboard.writeText(url).then(() => {
+          const old = copyModalBtn.textContent;
+          copyModalBtn.textContent = "Copied!";
+          setTimeout(() => { copyModalBtn.textContent = old; }, 2000);
+        });
+      }
+    });
+  }
+
+  // Esc key to close modal
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && backdrop && !backdrop.hidden) {
+      closeQrModal();
+    }
+  });
+
+  updateDashboardQrWidget();
+}
+
+// ---------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------
 loadDashboardSummary();
 refreshNotifications();
 setInterval(refreshNotifications, 30000);
+setupQrCodeHandlers();

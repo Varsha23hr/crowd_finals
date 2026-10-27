@@ -177,6 +177,9 @@ SQLALCHEMY_TRACK_MODIFICATIONS = False
 DASHBOARD_HOST = "0.0.0.0"
 DASHBOARD_PORT = 5000
 STATS_POLL_INTERVAL_MS = 1000   # how often the browser polls /api/stats
+# Optional public base URL for QR codes (e.g. "http://192.168.1.100:5000" or ngrok URL).
+# If None, automatically detects the machine's local network (LAN) IP.
+PUBLIC_BASE_URL = None
 
 # ---------------------------------------------------------------------------
 # SIREN

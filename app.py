@@ -19,7 +19,9 @@ from datetime import timedelta
 from datetime import datetime
 import random
 import smtplib
+import socket
 from email.mime.text import MIMEText
+import qrcode
 
 from flask import (
     Flask, render_template, jsonify, request, redirect,
@@ -619,6 +621,223 @@ def api_test_alert():
     }
     alerts.send_alert(camera_name="Test Camera", severity="WARNING", details=details)
     return jsonify({"status": "test alert sent"})
+
+# ---------------------------------------------------------------------------
+# PUBLIC CROWD SAFETY ADVISORY & QR CODE
+# ---------------------------------------------------------------------------
+
+def get_lan_ip():
+    """Detect the local machine's LAN IP address so mobile phones on the Wi-Fi network can connect."""
+    if getattr(config, "PUBLIC_BASE_URL", None):
+        return config.PUBLIC_BASE_URL.rstrip("/")
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        try:
+            return socket.gethostbyname(socket.gethostname())
+        except Exception:
+            return "127.0.0.1"
+
+
+def get_public_base_url():
+    """
+    Returns the root base URL (e.g. http://10.146.107.198:5000) accessible
+    from mobile devices on the local network or configured public URL.
+    """
+    if getattr(config, "PUBLIC_BASE_URL", None):
+        return config.PUBLIC_BASE_URL.rstrip("/")
+
+    # If the user accessed the dashboard through an IP other than localhost/127.0.0.1,
+    # preserve that host (including port)
+    if request:
+        try:
+            req_host = request.host
+            hostname = req_host.split(":")[0]
+            if hostname not in ("localhost", "127.0.0.1", "0.0.0.0"):
+                scheme = request.scheme or "http"
+                return f"{scheme}://{req_host}"
+        except Exception:
+            pass
+
+    lan_ip = get_lan_ip()
+    port = getattr(config, "DASHBOARD_PORT", 5000)
+    return f"http://{lan_ip}:{port}"
+
+
+def get_crowd_status_data(job_id=None):
+    """
+    Retrieves latest crowd safety data for an active or completed job,
+    or the most recent analysis if job_id is omitted.
+    """
+    active_job = None
+    analysis = None
+    target_job_id = None
+
+    if job_id:
+        safe_id = secure_filename(job_id)
+        # Check active jobs (exact or prefix match)
+        for jid, j in _active_jobs.items():
+            if jid == safe_id or jid.startswith(safe_id):
+                active_job = j
+                target_job_id = jid
+                break
+        if not active_job:
+            # Check analysis directory
+            analysis = _read_analysis(safe_id)
+            if not analysis and os.path.exists(config.ANALYSIS_DIR):
+                for fn in os.listdir(config.ANALYSIS_DIR):
+                    if fn.endswith(".json") and not fn.endswith("_frames.json") and fn.startswith(safe_id):
+                        target_job_id = fn[:-5]
+                        analysis = _read_analysis(target_job_id)
+                        break
+            else:
+                target_job_id = safe_id
+    else:
+        # Default: pick active job if running
+        if _active_jobs:
+            target_job_id = list(_active_jobs.keys())[-1]
+            active_job = _active_jobs[target_job_id]
+        else:
+            # Pick most recent from history
+            history = _read_history()
+            if history:
+                target_job_id = history[0]["job_id"]
+                analysis = _read_analysis(target_job_id)
+
+    # Extract crowd figures
+    if active_job:
+        status_info = active_job.get_status()
+        current_count = status_info.get("current_count", 0)
+        safe_capacity = getattr(active_job, "threshold", config.CROWD_THRESHOLD) or config.CROWD_THRESHOLD
+        is_live = True
+    elif analysis:
+        summary = analysis.get("summary", {})
+        current_count = summary.get("max_count", 0)
+        safe_capacity = summary.get("threshold", config.CROWD_THRESHOLD) or config.CROWD_THRESHOLD
+        is_live = False
+    else:
+        # Baseline fallback
+        current_count = 0
+        safe_capacity = config.CROWD_THRESHOLD
+        is_live = False
+
+    safe_capacity = max(1, int(safe_capacity))
+    current_count = int(current_count)
+    occupancy_pct = round((current_count / safe_capacity) * 100, 1)
+
+    # Classify status (SAFE / WARNING / CRITICAL)
+    if current_count >= safe_capacity:
+        status = "CRITICAL"
+        message = "Please do not enter. The crowd level has exceeded the safe capacity."
+    elif current_count >= round(safe_capacity * 0.7):
+        status = "WARNING"
+        message = "Caution advised. High crowd density detected. Please follow staff instructions."
+    else:
+        status = "SAFE"
+        message = "Normal crowd density. Entry permitted. Please proceed safely."
+
+    # Format timestamp: e.g. 8:22:56 PM
+    now = datetime.now()
+    last_updated = now.strftime("%I:%M:%S %p").lstrip("0")
+
+    return {
+        "job_id": target_job_id or job_id or "",
+        "status": status,
+        "current_people": current_count,
+        "current_count": current_count,
+        "safe_capacity": safe_capacity,
+        "occupancy_percentage": occupancy_pct,
+        "occupancy_pct": occupancy_pct,
+        "last_updated": last_updated,
+        "message": message,
+        "is_active": is_live,
+        "is_live": is_live,
+        "video_filename": (active_job.original_filename if active_job else (analysis.get('original_filename') if analysis else "")),
+    }
+
+
+@app.route("/public")
+@app.route("/public/<job_id>")
+def public_crowd_status(job_id=None):
+    """
+    Public Crowd Safety Status webpage accessible via mobile phone QR scan.
+    No login required.
+    """
+    data = get_crowd_status_data(job_id)
+    return render_template(
+        "public_status.html",
+        job_id=data["job_id"],
+        initial_status=data["status"],
+        initial_count=data["current_people"],
+        initial_capacity=data["safe_capacity"],
+        initial_occupancy=f"{data['occupancy_percentage']}%",
+        initial_time=data["last_updated"],
+        video_filename=data.get("video_filename", ""),
+    )
+
+
+@app.route("/api/public_status")
+@app.route("/api/public_status/<job_id>")
+def api_public_status(job_id=None):
+    """JSON API endpoint for the public page to auto-refresh crowd metrics."""
+    data = get_crowd_status_data(job_id)
+    return jsonify(data)
+
+
+@app.route("/api/qr_code")
+@app.route("/api/qr_code/<job_id>")
+def api_qr_code(job_id=None):
+    """Generates a dynamic QR code PNG pointing to the public crowd status URL."""
+    base_url = get_public_base_url()
+    if job_id:
+        target_url = f"{base_url}/public/{job_id}"
+    else:
+        target_url = f"{base_url}/public"
+
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=10,
+        border=3,
+    )
+    qr.add_data(target_url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="#0f172a", back_color="#ffffff")
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return send_file(buf, mimetype="image/png")
+
+
+@app.route("/api/public_info")
+@app.route("/api/public_info/<job_id>")
+def api_public_info(job_id=None):
+    """Returns URL and metadata for sharing / displaying QR codes on the dashboard."""
+    base_url = get_public_base_url()
+    if job_id:
+        public_url = f"{base_url}/public/{job_id}"
+        qr_url = f"/api/qr_code/{job_id}"
+    else:
+        public_url = f"{base_url}/public"
+        qr_url = "/api/qr_code"
+
+    # Get video filename for display
+    info_data = get_crowd_status_data(job_id)
+    video_filename = info_data.get('video_filename', '')
+
+    return jsonify({
+        "public_url": public_url,
+        "qr_code_url": qr_url,
+        "job_id": job_id or "",
+        "lan_ip": get_lan_ip(),
+        "video_filename": video_filename,
+    })
+
 
 if __name__ == "__main__":
     app.run(host=config.DASHBOARD_HOST, port=config.DASHBOARD_PORT,

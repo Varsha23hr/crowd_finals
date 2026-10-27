@@ -77,6 +77,10 @@
         <span id="pageTitle">Dashboard</span>
       </div>
       <div class="topbar-actions">
+        <button class="btn-qr-topbar" id="openQrModalBtn" title="Scan Public QR Code">
+          <svg viewBox="0 0 24 24" width="18" height="18"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M7 7h.01M17 7h.01M7 17h.01M17 17h.01"/></svg>
+          <span>Public QR Code</span>
+        </button>
         <button class="icon-btn" id="notifBtn" aria-label="Notifications">
           <svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
           <span class="notif-dot" id="notifDot" hidden></span>
@@ -143,6 +147,45 @@
               <div class="metric-label">Overcrowding Alerts</div>
             </div>
             <div class="metric-trend down">Events flagged</div>
+          </div>
+        </div>
+
+        <!-- PUBLIC CROWD ADVISORY & QR CODE CARD -->
+        <div class="card public-qr-card">
+          <div class="public-qr-layout">
+            <div class="public-qr-code-box" id="dashQrThumbnail" title="Click to enlarge QR code">
+              <img src="/api/qr_code" alt="Public Crowd Status QR Code" class="public-qr-img" id="dashQrImg">
+              <span class="qr-zoom-hint">🔍 Expand</span>
+            </div>
+            <div class="public-qr-info">
+              <div class="public-qr-badge">
+                <span class="live-dot-pulse"></span>
+                <span>Mobile Crowd Advisory Live</span>
+              </div>
+              <h3 class="public-qr-title">Public Crowd Safety Status QR Code</h3>
+              <p class="public-qr-desc">
+                Scan with any smartphone camera to open the public safety advisory webpage. Displays real-time crowd status (SAFE, WARNING, CRITICAL), people count, safe capacity, and safety guidance.
+              </p>
+              <div class="public-qr-url-row">
+                <div class="public-url-pill" id="dashPublicUrlPill">
+                  <span class="url-text" id="dashPublicUrlText">Loading public URL...</span>
+                  <button class="copy-url-btn" id="copyPublicUrlBtn" title="Copy public URL">
+                    <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    <span id="copyBtnLabel">Copy</span>
+                  </button>
+                </div>
+                <div class="public-qr-actions">
+                  <a href="/public" target="_blank" class="btn-qr-action btn-open-public" id="dashOpenPublicLink">
+                    <svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    <span>Open Webpage</span>
+                  </a>
+                  <a href="/api/qr_code" download="crowd_safety_qr.png" class="btn-qr-action btn-dl-qr" id="dashDownloadQrLink">
+                    <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <span>Download QR</span>
+                  </a>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -218,6 +261,11 @@
                 <span id="previewStatusText">Processing</span>
               </div>
             </div>
+          <div class="processing-qr-box" id="processingQrBox" hidden>
+            <h4 class="qr-title">Live Crowd Status QR Code</h4>
+            <img id="processingQrImg" class="processing-qr-img" alt="Processing QR Code" src="">
+            <p class="qr-hint">Scan with any smartphone to view live updates.</p>
+          </div>
 
             <!-- Progress bar -->
             <div class="processing-progress-bar">
@@ -256,7 +304,21 @@
 
         <div id="analysisContent" hidden>
           <div class="card">
-            <div class="card-header"><h3 id="analysisVideoName">Video</h3><span class="risk-badge" id="analysisRiskBadge">SAFE</span></div>
+            <div class="card-header">
+              <h3 id="analysisVideoName">Video</h3>
+              <div class="header-right-tools">
+                <button class="btn-secondary btn-analysis-qr" id="analysisQrBtn" title="Get QR Code for this video analysis">
+                  <svg viewBox="0 0 24 24" width="16" height="16"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
+                  <span>Video QR Code</span>
+                </button>
+            <div class="analysis-qr-box" id="analysisQrBox" hidden style="margin-top:10px;">
+              <h4 class="qr-title" style="margin:0 0 5px;">Video Analysis QR Code</h4>
+              <img id="analysisQrImg" class="analysis-qr-img" alt="Analysis QR Code" src="" style="max-width:150px;">
+              <p class="qr-hint" style="margin:5px 0 0;">Scan to view live analysis on mobile.</p>
+            </div>
+                <span class="risk-badge" id="analysisRiskBadge">SAFE</span>
+              </div>
+            </div>
             <div class="card-body">
               <!-- Dual video layout -->
               <div class="dual-video-grid">
@@ -500,6 +562,57 @@
   </div>
 </div>
 
-<script src="/static/app.js?v=3"></script>
+<!-- QR CODE MODAL -->
+<div class="modal-backdrop" id="qrModalBackdrop" hidden>
+  <div class="qr-modal-dialog">
+    <button class="modal-close-btn" id="closeQrModalBtn" aria-label="Close modal">&times;</button>
+    <div class="qr-modal-header">
+      <div class="qr-modal-icon">
+        <svg viewBox="0 0 24 24">
+          <circle cx="9" cy="8" r="3.2" fill="#38bdf8"/>
+          <path d="M3 18c0-3.2 2.6-5.8 5.8-5.8s5.8 2.6 5.8 5.8" stroke="#38bdf8" stroke-width="2.2" stroke-linecap="round"/>
+          <circle cx="16.5" cy="8.5" r="2.5" fill="#38bdf8" opacity="0.85"/>
+          <path d="M14 17.5c.8-2 2.6-3.4 4.8-3.4 1.2 0 2.2.4 3 1.1" stroke="#38bdf8" stroke-width="2.2" stroke-linecap="round" opacity="0.85"/>
+        </svg>
+      </div>
+      <div>
+        <h2 class="qr-modal-title">Crowd Safety Status QR Code</h2>
+        <p class="qr-modal-subtitle">Scan using a mobile phone camera to open public advisory</p>
+      </div>
+    </div>
+    <div class="qr-modal-body">
+      <div class="qr-modal-frame" id="modalQrFrame">
+        <img src="/api/qr_code" alt="Crowd Safety QR Code" id="modalQrImg" class="modal-qr-image">
+      </div>
+      <div class="qr-modal-target">
+        <span class="qr-target-label">Public Mobile URL:</span>
+        <div class="qr-url-box">
+          <span class="qr-url-string" id="modalQrUrlText">Loading...</span>
+          <button class="btn-copy-modal" id="modalCopyUrlBtn">Copy</button>
+        </div>
+      </div>
+      <div class="qr-modal-instructions">
+        <div class="instruction-item">
+          <span class="step-num">1</span>
+          <span>Ensure phone is on the same local Wi-Fi or network</span>
+        </div>
+        <div class="instruction-item">
+          <span class="step-num">2</span>
+          <span>Open phone Camera or Google Lens and scan the QR code</span>
+        </div>
+        <div class="instruction-item">
+          <span class="step-num">3</span>
+          <span>Real-time Crowd Safety Status (Safe/Warning/Critical) updates automatically</span>
+        </div>
+      </div>
+    </div>
+    <div class="qr-modal-footer">
+      <a href="/public" target="_blank" class="btn-primary" id="modalOpenUrlBtn">Open Page Directly</a>
+      <a href="/api/qr_code" download="crowd_safety_qr.png" class="btn-secondary" id="modalDownloadQrBtn">Download QR Code</a>
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js?v=4"></script>
 </body>
 </html>

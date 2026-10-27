@@ -15,6 +15,7 @@ annotated JPEG + stats dict for the Flask app to serve.
 """
 
 import os
+import math
 import time
 import threading
 from collections import deque
@@ -161,17 +162,41 @@ class CameraWorker(threading.Thread):
             if config.ENABLE_HEATMAP and centroids:
                 frame = heatmap_mod.compute_heatmap_overlay(frame, centroids)
 
+            # --- Critical & Safe Distance Proximity Analysis ---
+            crit_dist = getattr(config, "CRITICAL_DISTANCE", 55)
+            n_det = len(box_coords)
+            is_critical = [False] * n_det
+            critical_pairs = []
+            for i in range(n_det):
+                c1 = centroids[i]
+                for j in range(i + 1, n_det):
+                    c2 = centroids[j]
+                    dist = math.hypot(c1[0] - c2[0], c1[1] - c2[1])
+                    if dist < crit_dist:
+                        is_critical[i] = True
+                        is_critical[j] = True
+                        critical_pairs.append((c1, c2))
+
+            COLOR_SAFE = (0, 220, 0)
+            COLOR_CRITICAL = (0, 0, 255)
+
+            # Draw connecting red lines between pairs violating critical distance
+            for (c1, c2) in critical_pairs:
+                cv2.line(frame, c1, c2, COLOR_CRITICAL, 1, cv2.LINE_AA)
+
             # --- Draw bounding boxes + track IDs ---
             if boxes is not None:
                 for i, box in enumerate(boxes):
                     x1, y1, x2, y2 = box_coords[i]
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                    box_color = COLOR_CRITICAL if (i < len(is_critical) and is_critical[i]) else COLOR_SAFE
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, 2)
+                    cv2.circle(frame, centroids[i], 3, box_color, -1)
                     label = ""
                     if config.ENABLE_TRACKING and box.id is not None:
                         label = f"ID {int(box.id[0])}"
                     if label:
                         cv2.putText(frame, label, (x1, max(0, y1 - 5)),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1, cv2.LINE_AA)
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, box_color, 1, cv2.LINE_AA)
 
             # --- Zones: assign counts, draw, get exit recommendation ---
             zone_stats = []
