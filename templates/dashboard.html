@@ -216,8 +216,51 @@
           <div class="card-header"><h3>Upload Video</h3></div>
           <div class="card-body">
             
-            <div class="area-config-section">
-              <p>The system will automatically calibrate the Safe Crowd Threshold by analyzing the first 5 seconds of the video.</p>
+            <div class="threshold-config-box">
+              <div class="threshold-config-header">
+                <span class="threshold-config-title">Step 1: Detection &amp; Threshold Configuration</span>
+                <span class="threshold-config-subtitle">Choose whether to apply a crowd threshold or monitor people count and density continuously.</span>
+              </div>
+              <div class="threshold-mode-selector">
+                <label class="threshold-mode-card active" id="modeCardWith">
+                  <input type="radio" name="thresholdMode" value="with" checked id="modeWithRadio">
+                  <div class="mode-card-content">
+                    <div class="mode-card-title">
+                      <span class="mode-icon">🛡️</span>
+                      <strong>With Threshold</strong>
+                    </div>
+                    <span class="mode-desc">Set a safe crowd capacity threshold to trigger real-time alerts, risk warnings, and incident logs when exceeded.</span>
+                  </div>
+                </label>
+                <label class="threshold-mode-card" id="modeCardWithout">
+                  <input type="radio" name="thresholdMode" value="without" id="modeWithoutRadio">
+                  <div class="mode-card-content">
+                    <div class="mode-card-title">
+                      <span class="mode-icon">📊</span>
+                      <strong>Without Threshold</strong>
+                    </div>
+                    <span class="mode-desc">Monitor detected people count and crowd density continuously with threshold-based alerts disabled.</span>
+                  </div>
+                </label>
+              </div>
+
+              <!-- Input for With Threshold -->
+              <div class="threshold-input-panel" id="thresholdInputPanel">
+                <label for="thresholdInput" class="threshold-label">
+                  <span>Safe Crowd Threshold:</span>
+                  <span class="threshold-hint">(Maximum recommended people count before alerts)</span>
+                </label>
+                <div class="threshold-input-group">
+                  <input type="number" id="thresholdInput" min="1" max="1000" value="20" placeholder="e.g. 20" class="threshold-num-input">
+                  <span class="input-unit">people</span>
+                </div>
+              </div>
+
+              <!-- Notice for Without Threshold -->
+              <div class="threshold-disabled-notice" id="thresholdDisabledNotice" style="display: none;">
+                <span class="notice-icon">ℹ️</span>
+                <span><strong>Monitoring Mode Active:</strong> Video will be analyzed for continuous people counting and crowd density estimation. Threshold-based alarm sirens and incident alerts are disabled.</span>
+              </div>
             </div>
 
             <hr class="divider">
@@ -494,6 +537,7 @@
 
             <div class="report-meta" id="reportMeta" hidden>
               <div><span>Report generated</span><b id="reportDate">—</b></div>
+              <div><span>Threshold mode</span><b id="reportThresholdMode">—</b></div>
               <div><span>Analysis duration</span><b id="reportDuration">—</b></div>
               <div><span>Overall risk</span><b id="reportRisk">—</b></div>
             </div>
@@ -526,7 +570,7 @@
           <div class="card-body table-wrap">
             <table class="data-table" id="historyTable">
               <thead><tr>
-                <th>Video Name</th><th>Upload Date</th><th>Status</th>
+                <th>Video Name</th><th>Upload Date</th><th>Mode / Threshold</th><th>Status</th>
                 <th>Maximum Crowd</th><th>Alerts</th><th></th>
               </tr></thead>
               <tbody id="historyTableBody"></tbody>

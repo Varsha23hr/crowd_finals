@@ -414,9 +414,21 @@ def api_upload():
     save_path = os.path.join(config.UPLOAD_DIR, stored_name)
     file.save(save_path)
 
-    threshold = request.form.get("threshold", type=int)
-    if threshold is None:
-        threshold = config.CROWD_THRESHOLD
+    threshold_mode = request.form.get("threshold_mode", "with").strip().lower()
+    raw_thresh = request.form.get("threshold")
+
+    if threshold_mode == "without" or raw_thresh in ("0", 0, "none", "null", ""):
+        threshold_mode = "without"
+        threshold = None
+    else:
+        threshold_mode = "with"
+        try:
+            threshold = int(raw_thresh) if raw_thresh is not None else config.CROWD_THRESHOLD
+            if threshold <= 0:
+                threshold_mode = "without"
+                threshold = None
+        except (ValueError, TypeError):
+            threshold = config.CROWD_THRESHOLD
 
     user_id = current_user_id()
     username = current_user()
@@ -431,6 +443,7 @@ def api_upload():
             upload_path=save_path,
             status="queued",
             threshold=threshold,
+            threshold_mode=threshold_mode,
         )
         db.session.add(video_rec)
         db.session.commit()
@@ -438,7 +451,7 @@ def api_upload():
         print(f"[UPLOAD] Warning: could not save UploadedVideo to DB: {db_err}")
 
     job = VideoJob(job_id, save_path, file.filename, _shared_model, fallback_model=_shared_fallback_model,
-                    uploaded_by=username, user_id=user_id, threshold=threshold)
+                    uploaded_by=username, user_id=user_id, threshold=threshold, threshold_mode=threshold_mode)
     _active_jobs[job_id] = job
     job.start()
 
@@ -591,15 +604,20 @@ def report_csv(job_id):
 
     buf = io.StringIO()
     writer = csv.writer(buf)
+    
+    is_without = (analysis.get("summary", {}).get("threshold_mode") == "without" or analysis.get("summary", {}).get("threshold") in (None, 0, "Disabled"))
+    writer.writerow(["Threshold Mode", "Without Threshold (Alerts Disabled)" if is_without else "With Threshold"])
+    writer.writerow(["Safe Crowd Threshold", "Disabled" if is_without else analysis.get("summary", {}).get("threshold", config.CROWD_THRESHOLD)])
+    writer.writerow([])
     writer.writerow(["Time (s)", "Count", "Status"])
     for row in analysis["timeseries"]:
         writer.writerow([row["t"], row["count"], row["status"]])
     writer.writerow([])
     writer.writerow(["Event #", "Start (s)", "End (s)", "Duration (s)",
                       "Peak Count", "Density %", "Severity", "Status"])
-    for e in analysis["events"]:
-        writer.writerow([e["id"], e["start_t"], e["end_t"], e["duration"],
-                          e["peak_count"], e["density_pct"], e["severity"], e["status"]])
+    for i, e in enumerate(analysis["events"], start=1):
+        writer.writerow([e.get("id", e.get("event_id", i)), e.get("start_t"), e.get("end_t"), e.get("duration"),
+                          e.get("peak_count"), e.get("density_pct"), e.get("severity"), e.get("status")])
 
     mem = io.BytesIO(buf.getvalue().encode("utf-8"))
     return send_file(mem, as_attachment=True, mimetype="text/csv",
@@ -624,6 +642,9 @@ def report_excel(job_id):
     ws1 = wb.active
     ws1.title = "Summary"
     ws1.append(["Video", analysis["original_filename"]])
+    is_without = (analysis.get("summary", {}).get("threshold_mode") == "without" or analysis.get("summary", {}).get("threshold") in (None, 0, "Disabled"))
+    ws1.append(["Threshold Mode", "Without Threshold (Alerts Disabled)" if is_without else "With Threshold"])
+    ws1.append(["Safe Crowd Threshold", "Disabled" if is_without else analysis.get("summary", {}).get("threshold", config.CROWD_THRESHOLD)])
     ws1.append(["Duration (s)", analysis["video"]["duration_sec"]])
     ws1.append(["Resolution", analysis["video"]["resolution"]])
     ws1.append(["Average Crowd", analysis["summary"]["avg_count"]])
@@ -640,9 +661,9 @@ def report_excel(job_id):
     ws3 = wb.create_sheet("Events")
     ws3.append(["Event #", "Start (s)", "End (s)", "Duration (s)",
                 "Peak Count", "Density %", "Severity", "Status"])
-    for e in analysis["events"]:
-        ws3.append([e["id"], e["start_t"], e["end_t"], e["duration"],
-                    e["peak_count"], e["density_pct"], e["severity"], e["status"]])
+    for i, e in enumerate(analysis["events"], start=1):
+        ws3.append([e.get("id", e.get("event_id", i)), e.get("start_t"), e.get("end_t"), e.get("duration"),
+                    e.get("peak_count"), e.get("density_pct"), e.get("severity"), e.get("status")])
 
     mem = io.BytesIO()
     wb.save(mem)
@@ -842,17 +863,25 @@ def get_crowd_status_data(job_id=None, user_id=None):
         # Neither job_id nor user_id provided
         pass
 
+    # Determine if without threshold
+    is_without_threshold = False
+    if active_job:
+        is_without_threshold = (getattr(active_job, "threshold_mode", "with") == "without")
+    elif analysis:
+        summary = analysis.get("summary", {})
+        is_without_threshold = (summary.get("threshold_mode") == "without" or summary.get("threshold") in (None, 0, "Disabled"))
+
     # Extract crowd figures
     if active_job:
         status_info = active_job.get_status()
         current_count = status_info.get("current_count", 0)
-        safe_capacity = getattr(active_job, "threshold", config.CROWD_THRESHOLD) or config.CROWD_THRESHOLD
+        safe_capacity = getattr(active_job, "threshold", None)
         is_live = True
         video_filename = getattr(active_job, "original_filename", "")
     elif analysis:
         summary = analysis.get("summary", {})
         current_count = summary.get("max_count", 0)
-        safe_capacity = summary.get("threshold", config.CROWD_THRESHOLD) or config.CROWD_THRESHOLD
+        safe_capacity = summary.get("threshold", None)
         is_live = False
         video_filename = analysis.get('original_filename', '')
     else:
@@ -862,23 +891,31 @@ def get_crowd_status_data(job_id=None, user_id=None):
         is_live = False
         video_filename = "No video uploaded yet"
 
-    safe_capacity = max(1, int(safe_capacity))
     current_count = int(current_count)
-    occupancy_pct = round((current_count / safe_capacity) * 100, 1)
 
-    # Classify status (SAFE / WARNING / CRITICAL)
-    if not active_job and not analysis:
-        status = "SAFE"
-        message = "No video analysis active. Upload a video to monitor crowd safety."
-    elif current_count >= safe_capacity:
-        status = "CRITICAL"
-        message = "Please do not enter. The crowd level has exceeded the safe capacity."
-    elif current_count >= round(safe_capacity * 0.7):
-        status = "WARNING"
-        message = "Caution advised. High crowd density detected. Please follow staff instructions."
+    if is_without_threshold:
+        status = "MONITORING"
+        safe_capacity_display = "Disabled"
+        occupancy_pct = "N/A"
+        message = "Crowd monitoring active. Threshold-based capacity alerts are disabled."
     else:
-        status = "SAFE"
-        message = "Normal crowd density. Entry permitted. Please proceed safely."
+        safe_cap_val = max(1, int(safe_capacity or config.CROWD_THRESHOLD))
+        safe_capacity_display = safe_cap_val
+        occupancy_pct = round((current_count / safe_cap_val) * 100, 1)
+
+        # Classify status (SAFE / WARNING / CRITICAL)
+        if not active_job and not analysis:
+            status = "SAFE"
+            message = "No video analysis active. Upload a video to monitor crowd safety."
+        elif current_count >= safe_cap_val:
+            status = "CRITICAL"
+            message = "Please do not enter. The crowd level has exceeded the safe capacity."
+        elif current_count >= round(safe_cap_val * 0.7):
+            status = "WARNING"
+            message = "Caution advised. High crowd density detected. Please follow staff instructions."
+        else:
+            status = "SAFE"
+            message = "Normal crowd density. Entry permitted. Please proceed safely."
 
     # Format timestamp: e.g. 8:22:56 PM
     now = datetime.now()
@@ -887,10 +924,11 @@ def get_crowd_status_data(job_id=None, user_id=None):
     return {
         "job_id": target_job_id or job_id or "",
         "user_id": user_id,
+        "threshold_mode": "without" if is_without_threshold else "with",
         "status": status,
         "current_people": current_count,
         "current_count": current_count,
-        "safe_capacity": safe_capacity,
+        "safe_capacity": safe_capacity_display,
         "occupancy_percentage": occupancy_pct,
         "occupancy_pct": occupancy_pct,
         "last_updated": last_updated,
@@ -912,14 +950,16 @@ def public_crowd_status(job_id=None, user_id=None):
     if user_id is None and not job_id and session.get("user_id"):
         user_id = session.get("user_id")
     data = get_crowd_status_data(job_id=job_id, user_id=user_id)
+    initial_cap = data["safe_capacity"] if data.get("threshold_mode") != "without" else "Disabled"
+    initial_occ = f"{data['occupancy_percentage']}%" if data.get("threshold_mode") != "without" else "N/A"
     return render_template(
         "public_status.html",
         job_id=data.get("job_id", ""),
         user_id=user_id or data.get("user_id", ""),
         initial_status=data["status"],
         initial_count=data["current_people"],
-        initial_capacity=data["safe_capacity"],
-        initial_occupancy=f"{data['occupancy_percentage']}%",
+        initial_capacity=initial_cap,
+        initial_occupancy=initial_occ,
         initial_time=data["last_updated"],
         video_filename=data.get("video_filename", ""),
     )

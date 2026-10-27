@@ -131,7 +131,7 @@ async function loadDashboardSummary() {
             <div class="rname">${escapeHtml(r.original_filename)}</div>
             <div class="rmeta">${fmtDate(r.processed_at)}</div>
           </div>
-          <span class="badge badge-${r.overall_risk}">${r.overall_risk}</span>
+          <span class="badge ${r.overall_risk === 'DISABLED' ? 'badge-monitoring' : 'badge-' + r.overall_risk}">${r.overall_risk === 'DISABLED' ? 'ALERTS DISABLED' : r.overall_risk}</span>
         </div>`).join("");
     }
   } catch (e) { console.error(e); }
@@ -149,6 +149,50 @@ dropzone.classList.remove('disabled');
 const fileInput = document.getElementById("fileInput");
 const browseBtn = document.getElementById("browseBtn");
 let selectedFile = null;
+const thresholdModeRadios = document.getElementsByName('thresholdMode');
+const thresholdInput = document.getElementById('thresholdInput');
+const cardWith = document.getElementById('modeCardWith');
+const cardWithout = document.getElementById('modeCardWithout');
+const thresholdInputPanel = document.getElementById('thresholdInputPanel');
+const thresholdDisabledNotice = document.getElementById('thresholdDisabledNotice');
+
+// Update UI enable/disable based on mode
+function updateThresholdUI() {
+  const mode = Array.from(thresholdModeRadios).find(r => r.checked)?.value || 'with';
+  if (cardWith && cardWithout) {
+    if (mode === 'with') {
+      cardWith.classList.add('active');
+      cardWithout.classList.remove('active');
+    } else {
+      cardWith.classList.remove('active');
+      cardWithout.classList.add('active');
+    }
+  }
+  if (thresholdInput) {
+    thresholdInput.disabled = (mode === 'without');
+  }
+  if (thresholdInputPanel) {
+    thresholdInputPanel.style.display = (mode === 'with') ? 'flex' : 'none';
+  }
+  if (thresholdDisabledNotice) {
+    thresholdDisabledNotice.style.display = (mode === 'without') ? 'flex' : 'none';
+  }
+}
+thresholdModeRadios.forEach(r => r.addEventListener('change', updateThresholdUI));
+if (cardWith) {
+  cardWith.addEventListener('click', () => {
+    const r = document.getElementById('modeWithRadio');
+    if (r) { r.checked = true; updateThresholdUI(); }
+  });
+}
+if (cardWithout) {
+  cardWithout.addEventListener('click', () => {
+    const r = document.getElementById('modeWithoutRadio');
+    if (r) { r.checked = true; updateThresholdUI(); }
+  });
+}
+// initial state
+updateThresholdUI();
 
 browseBtn.addEventListener("click", () => {
   if (dropzone.classList.contains('disabled')) return;
@@ -200,7 +244,16 @@ function uploadVideo(file) {
   const form = new FormData();
   form.append("video", file);
   form.append("area", 0);
-  form.append("threshold", calculatedThreshold || 20);
+  // determine threshold based on mode selection
+  const mode = Array.from(thresholdModeRadios).find(r => r.checked)?.value || 'with';
+  form.append("threshold_mode", mode);
+  if (mode === 'with') {
+    const userThresh = parseInt(thresholdInput.value, 10);
+    form.append("threshold", (!isNaN(userThresh) && userThresh > 0) ? userThresh : 20);
+  } else {
+    // without threshold, send 0 (no threshold applied)
+    form.append("threshold", 0);
+  }
 
   const progressBlock = document.getElementById("uploadProgressBlock");
   const fill = document.getElementById("uploadProgressFill");
@@ -301,6 +354,7 @@ function updateProcessingUI(s) {
 // ---------------------------------------------------------------------
 // Analysis page — dual-video sync, live stats, frame navigation
 // ---------------------------------------------------------------------
+let currentAnalysisData = null;
 let frameData = null;   // { fps, total_frames, frames: [ {frame, t, count, status, ...} ] }
 let videoFps = 25;
 let totalVideoFrames = 0;
@@ -439,13 +493,21 @@ const AlarmSystem = (() => {
 
 function renderAnalysis(data) {
   currentJobId = data.job_id;
+  currentAnalysisData = data;
   document.getElementById("analysisEmpty").hidden = true;
   document.getElementById("analysisContent").hidden = false;
 
   document.getElementById("analysisVideoName").textContent = data.original_filename;
+  
+  const isWithoutThreshold = (data.summary.threshold_mode === "without" || data.summary.threshold === "Disabled" || data.summary.threshold === null);
   const badge = document.getElementById("analysisRiskBadge");
-  badge.textContent = data.summary.overall_risk;
-  badge.className = "risk-badge " + data.summary.overall_risk;
+  if (isWithoutThreshold) {
+    badge.textContent = "ALERTS DISABLED";
+    badge.className = "risk-badge badge-monitoring";
+  } else {
+    badge.textContent = data.summary.overall_risk;
+    badge.className = "risk-badge " + data.summary.overall_risk;
+  }
 
   // set video fps from analysis data
   videoFps = data.video.fps || 25;
@@ -493,8 +555,15 @@ function renderAnalysis(data) {
 
   // summary
   const summary = data.summary, vid = data.video;
+  const modeLabel = isWithoutThreshold ? "Without Threshold (Continuous Monitoring)" : "With Threshold";
+  const threshDisplay = isWithoutThreshold ? "Disabled" : (summary.threshold || "20");
+  const alertsDisplay = isWithoutThreshold ? "Disabled (Alerts turned off)" : summary.total_alerts;
+  const riskDisplay = isWithoutThreshold ? "Disabled (Continuous monitoring)" : summary.overall_risk;
+
   document.getElementById("summaryList").innerHTML = `
     ${summaryRow("Video Name", data.original_filename)}
+    ${summaryRow("Threshold Mode", modeLabel)}
+    ${summaryRow("Safe Crowd Threshold", threshDisplay)}
     ${summaryRow("Duration", fmtDuration(vid.duration_sec))}
     ${summaryRow("Resolution", vid.resolution)}
     ${summaryRow("Total Frames", vid.total_frames)}
@@ -502,13 +571,13 @@ function renderAnalysis(data) {
     ${summaryRow("Average Crowd", summary.avg_count)}
     ${summaryRow("Maximum Crowd", summary.max_count)}
     ${summaryRow("Peak Crowd Time", fmtDuration(summary.peak_time_sec))}
-    ${summaryRow("Total Alerts", summary.total_alerts)}
-    ${summaryRow("Overall Risk Level", summary.overall_risk)}
+    ${summaryRow("Total Alerts", alertsDisplay)}
+    ${summaryRow("Overall Risk Level", riskDisplay)}
   `;
 
-  renderCharts(data);
+  renderCharts(data, isWithoutThreshold);
   renderTimeline(data.timeseries, data.events, vid.duration_sec);
-  renderEventsTable(data.events);
+  renderEventsTable(data.events, isWithoutThreshold);
   document.getElementById("heatmapImg").src = data.heatmap_url || "";
   renderKeyframes(data.keyframes);
 }
@@ -753,27 +822,41 @@ function updateLiveStats(currentTime) {
   }
 
   const f = frames[best];
+  const isWithout = (f.threshold === "Disabled" || f.status === "MONITORING" || (currentAnalysisData && currentAnalysisData.summary && currentAnalysisData.summary.threshold_mode === "without"));
+
   setLiveStatValue("lsFrame", f.frame);
   setLiveStatValue("lsTimestamp", fmtTime(f.t));
   setLiveStatValue("lsCount", f.count);
-  setLiveStatValue("lsDensity", f.density_pct + "%");
-  setLiveStatValue("lsThreshold", f.threshold);
-  setLiveStatValue("lsOccupancy", f.occupancy_pct + "%");
+  setLiveStatValue("lsDensity", (f.density_pct !== undefined ? f.density_pct : "0") + "%");
+
+  if (isWithout) {
+    setLiveStatValue("lsThreshold", "Disabled");
+    setLiveStatValue("lsOccupancy", "N/A");
+  } else {
+    setLiveStatValue("lsThreshold", f.threshold);
+    setLiveStatValue("lsOccupancy", (f.occupancy_pct !== undefined ? f.occupancy_pct : "0") + "%");
+  }
 
   const riskEl = document.getElementById("lsRisk");
-  if (riskEl && riskEl.textContent !== f.status) {
-    riskEl.textContent = f.status;
-    riskEl.style.color = STATUS_COLORS[f.status] || "inherit";
+  const displayStatus = isWithout ? "MONITORING" : f.status;
+  if (riskEl && riskEl.textContent !== displayStatus) {
+    riskEl.textContent = displayStatus;
+    riskEl.style.color = isWithout ? "#2563EB" : (STATUS_COLORS[f.status] || "inherit");
     riskEl.classList.remove("pulse");
     void riskEl.offsetWidth; // force reflow
     riskEl.classList.add("pulse");
   }
   
-  if (currentAlarmStatus !== f.status) {
-    currentAlarmStatus = f.status;
-    if (isPlaying && !isAlarmMuted) {
-      AlarmSystem.play(currentAlarmStatus);
+  if (!isWithout) {
+    if (currentAlarmStatus !== f.status) {
+      currentAlarmStatus = f.status;
+      if (isPlaying && !isAlarmMuted) {
+        AlarmSystem.play(currentAlarmStatus);
+      }
     }
+  } else {
+    currentAlarmStatus = "MONITORING";
+    AlarmSystem.stop();
   }
 
   setLiveStatValue("lsInference", f.inference_ms + " ms");
@@ -810,11 +893,11 @@ function summaryRow(label, value) {
 
 function destroyChart(key) { if (charts[key]) { charts[key].destroy(); delete charts[key]; } }
 
-function renderCharts(data) {
+function renderCharts(data, isWithout = false) {
   const ts = data.timeseries;
   const labels = ts.map(p => fmtDuration(p.t));
   const counts = ts.map(p => p.count);
-  const colors = ts.map(p => STATUS_COLORS[p.status]);
+  const colors = ts.map(p => isWithout ? "#2563EB" : (STATUS_COLORS[p.status] || "#2563EB"));
 
   ["chartCountTime", "chartDensity", "chartOccupancy", "chartAlertFreq", "chartDistribution"]
     .forEach(destroyChart);
@@ -834,14 +917,17 @@ function renderCharts(data) {
   });
 
   const ctx3 = document.getElementById("chartOccupancy");
+  const occupancyData = isWithout ? ts.map(p => p.density_pct !== undefined ? p.density_pct : Math.min(100, p.count * 2)) : counts;
   charts.chartOccupancy = new Chart(ctx3, {
     type: "line",
-    data: { labels, datasets: [{ data: counts, borderColor: "#22C55E", backgroundColor: "rgba(34,197,94,.08)", fill: true, tension: .4, pointRadius: 0, borderWidth: 2 }] },
+    data: { labels, datasets: [{ data: occupancyData, borderColor: "#22C55E", backgroundColor: "rgba(34,197,94,.08)", fill: true, tension: .4, pointRadius: 0, borderWidth: 2 }] },
     options: baseChartOptions(),
   });
 
   const sevCount = { WARNING: 0, HIGH: 0, CRITICAL: 0 };
-  data.events.forEach(e => { sevCount[e.severity] = (sevCount[e.severity] || 0) + 1; });
+  if (!isWithout) {
+    data.events.forEach(e => { sevCount[e.severity] = (sevCount[e.severity] || 0) + 1; });
+  }
   const ctx4 = document.getElementById("chartAlertFreq");
   charts.chartAlertFreq = new Chart(ctx4, {
     type: "bar",
@@ -907,8 +993,12 @@ function renderTimeline(timeseries, events, duration) {
   });
 }
 
-function renderEventsTable(events) {
+function renderEventsTable(events, isWithout = false) {
   const body = document.getElementById("eventsTableBody");
+  if (isWithout) {
+    body.innerHTML = `<tr><td colspan="8" class="empty-hint" style="padding:16px;"><strong>Threshold alerts disabled:</strong> Video was analyzed in Without Threshold mode. Continuous people count and crowd density were recorded without raising capacity breach alerts.</td></tr>`;
+    return;
+  }
   if (!events.length) {
     body.innerHTML = `<tr><td colspan="8" class="empty-hint">No overcrowding events detected in this video.</td></tr>`;
     return;
@@ -984,11 +1074,17 @@ async function loadReportVideoOptions() {
 function updateReportPanel(jobId, rows) {
   const row = rows.find(r => r.job_id === jobId);
   if (!row) return;
+  const isWithout = (row.threshold_mode === "without" || row.threshold === 0 || row.threshold === null || row.threshold === "Disabled");
+
   document.getElementById("reportMeta").hidden = false;
   document.getElementById("exportButtons").hidden = false;
   document.getElementById("reportDate").textContent = fmtDate(row.processed_at);
+  const threshEl = document.getElementById("reportThresholdMode");
+  if (threshEl) {
+    threshEl.textContent = isWithout ? "Without Threshold (Disabled)" : `With Threshold (${row.threshold || 20})`;
+  }
   document.getElementById("reportDuration").textContent = fmtDuration(row.duration_sec);
-  document.getElementById("reportRisk").textContent = row.overall_risk;
+  document.getElementById("reportRisk").textContent = isWithout ? "ALERTS DISABLED" : row.overall_risk;
 
   document.getElementById("exportPdf").onclick = () => window.open(`/api/report/pdf/${jobId}`, "_blank");
   document.getElementById("exportExcel").onclick = () => window.open(`/api/report/excel/${jobId}`, "_blank");
@@ -1010,18 +1106,27 @@ async function loadHistory() {
 function renderHistoryTable(rows) {
   const body = document.getElementById("historyTableBody");
   if (!rows.length) {
-    body.innerHTML = `<tr><td colspan="6" class="empty-hint">No videos analyzed yet.</td></tr>`;
+    body.innerHTML = `<tr><td colspan="7" class="empty-hint">No videos analyzed yet.</td></tr>`;
     return;
   }
-  body.innerHTML = rows.map(r => `
+  body.innerHTML = rows.map(r => {
+    const isWithout = (r.threshold_mode === "without" || r.threshold === 0 || r.threshold === null || r.threshold === "Disabled");
+    const modeBadge = isWithout
+      ? `<span class="badge badge-monitoring" title="Continuous monitoring without capacity threshold">Without Threshold</span>`
+      : `<span class="badge badge-with" title="Safe Capacity: ${r.threshold || 20}">With (${r.threshold || 20})</span>`;
+    const alertsDisplay = isWithout ? `<span class="text-muted" title="Threshold alerts disabled">—</span>` : r.total_alerts;
+
+    return `
     <tr>
       <td>${escapeHtml(r.original_filename)}</td>
       <td>${fmtDate(r.processed_at)}</td>
+      <td>${modeBadge}</td>
       <td><span class="badge badge-SAFE">Done</span></td>
       <td>${r.max_count}</td>
-      <td>${r.total_alerts}</td>
+      <td>${alertsDisplay}</td>
       <td><button class="link-btn" data-id="${r.job_id}">View Analysis</button></td>
-    </tr>`).join("");
+    </tr>`;
+  }).join("");
   body.querySelectorAll(".link-btn").forEach(btn => {
     btn.addEventListener("click", async () => {
       await openAnalysis(btn.dataset.id);

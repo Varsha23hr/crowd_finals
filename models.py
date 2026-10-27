@@ -133,7 +133,8 @@ class UploadedVideo(db.Model):
     avg_count = db.Column(db.Float, default=0.0)
     total_alerts = db.Column(db.Integer, default=0)
     overall_risk = db.Column(db.String(20), default='SAFE')
-    threshold = db.Column(db.Integer, default=20)
+    threshold = db.Column(db.Integer, nullable=True, default=20)
+    threshold_mode = db.Column(db.String(20), default='with')
 
     user = db.relationship('User', backref=db.backref('uploaded_videos', lazy=True, order_by='UploadedVideo.processed_at.desc()'))
 
@@ -152,5 +153,6 @@ class UploadedVideo(db.Model):
             'total_alerts': self.total_alerts,
             'overall_risk': self.overall_risk,
             'threshold': self.threshold,
+            'threshold_mode': self.threshold_mode or ('without' if self.threshold in (0, None) else 'with'),
         }
 

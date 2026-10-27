@@ -53,7 +53,8 @@ class VideoJob(threading.Thread):
     def __init__(self, job_id: str, filepath: str, original_filename: str,
                  model: YOLO, bytetrack: bool = False, uploaded_by: str = "Unknown",
                  user_id: int = None, fallback_model: YOLO = None,
-                 threshold: int = config.CROWD_THRESHOLD):
+                 threshold: int = config.CROWD_THRESHOLD,
+                 threshold_mode: str = "with"):
         super().__init__(daemon=True)
         self.job_id = job_id
         self.filepath = filepath
@@ -64,19 +65,21 @@ class VideoJob(threading.Thread):
         self.bytetrack = bytetrack
         self.uploaded_by = uploaded_by
         self.user_id = user_id
-        self.threshold = threshold
-        self.auto_calibrate = (threshold == 0)
         
-        if self.auto_calibrate:
-            # Temporary defaults while calibrating
-            self.threshold = 999999
-            self.high_limit = 999999
-            self.safe_limit = 999999
-            self._calibrated = False
+        # Configure mode
+        if threshold_mode == "without" or threshold in (0, None, "0", "without"):
+            self.threshold_mode = "without"
+            self.threshold = None
+            self.high_limit = None
+            self.safe_limit = None
         else:
-            self.high_limit = max(1, round(threshold * 0.8))
-            self.safe_limit = max(1, round(threshold * 0.6))
-            self._calibrated = True
+            self.threshold_mode = "with"
+            try:
+                self.threshold = max(1, int(threshold))
+            except (ValueError, TypeError):
+                self.threshold = config.CROWD_THRESHOLD
+            self.high_limit = max(1, round(self.threshold * 0.8))
+            self.safe_limit = max(1, round(self.threshold * 0.6))
 
         self._lock = threading.Lock()
         self._status = {
@@ -102,6 +105,8 @@ class VideoJob(threading.Thread):
             self._status.update(kwargs)
 
     def _classify(self, count):
+        if self.threshold_mode == "without":
+            return "MONITORING"
         if count >= self.threshold: return "CRITICAL"
         if count >= self.high_limit: return "HIGH"
         if count >= self.safe_limit: return "WARNING"
@@ -151,6 +156,7 @@ class VideoJob(threading.Thread):
         current_event = None
         counts_all = []
         frame_data_list = []  # per-frame data for live analysis panel
+        peak_frame = None
 
         start_time = time.time()
         frame_id = 0
@@ -263,27 +269,18 @@ class VideoJob(threading.Thread):
                 inference_ms = getattr(self, "_last_inference_ms", 0.0)
 
             counts_all.append(person_count)
+            if peak_frame is None or (counts_all and person_count >= max(counts_all)):
+                peak_frame = frame.copy()
 
-            if self.auto_calibrate and not self._calibrated:
-                if t_sec > 5.0 or (frame_id == total_frames and total_frames > 0):
-                    # Calibrate based on the max crowd seen so far
-                    calib_max = max(counts_all) if counts_all else 0
-                    # Add a 50% buffer to normal max crowd to get threshold, min 10
-                    self.threshold = max(10, int(calib_max * 1.5))
-                    self.high_limit = max(1, round(self.threshold * 0.8))
-                    self.safe_limit = max(1, round(self.threshold * 0.6))
-                    self._calibrated = True
-                    print(f"[VideoJob {self.job_id}] Auto-calibrated threshold to {self.threshold} after {t_sec:.1f}s")
-            
             status = self._classify(person_count)
-            if person_count >= self.threshold:
+            if self.threshold_mode == "with" and person_count >= (self.threshold or 999999):
                 play_siren()
             else:
                 stop_siren()
 
-            # --- Real-time email alert (fires immediately when HIGH/CRITICAL) ---
+            # --- Real-time email alert (only in With Threshold mode) ---
             ALERT_COOLDOWN_SECONDS = 60  # only send once per minute max
-            if status in ("HIGH", "CRITICAL"):
+            if self.threshold_mode == "with" and status in ("HIGH", "CRITICAL"):
                 if (t_sec - self._last_realtime_alert_t) >= ALERT_COOLDOWN_SECONDS:
                     self._last_realtime_alert_t = t_sec
                     try:
@@ -330,8 +327,12 @@ class VideoJob(threading.Thread):
                 cv2.circle(frame, centroids[i], 3, box_color, -1)
 
             # 3. Clean status & timestamp overlay matching expected visual output
-            status_text = f"Status: {status}"
-            status_color = COLOR_CRITICAL if (status in ("HIGH", "CRITICAL") or any(is_critical)) else COLOR_SAFE
+            if self.threshold_mode == "without":
+                status_text = f"People: {person_count} | Mode: Without Threshold (Alerts Disabled)"
+                status_color = (250, 180, 50)  # Bright cyan/sky blue
+            else:
+                status_text = f"Status: {status} | People: {person_count} / Limit: {self.threshold}"
+                status_color = COLOR_CRITICAL if (status in ("HIGH", "CRITICAL") or any(is_critical)) else COLOR_SAFE
             cv2.putText(frame, status_text, (20, 35),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.75, status_color, 2, cv2.LINE_AA)
             ts_label = time.strftime("%H:%M:%S", time.gmtime(t_sec))
@@ -351,8 +352,15 @@ class VideoJob(threading.Thread):
                     pass
 
             # --- per-frame data for live analysis panel ---
-            density_pct_frame = min(100, round(100 * person_count / max(self.threshold, 1)))
-            occupancy_pct_frame = min(100, round(100 * person_count / max(self.threshold * 1.5, 1)))
+            if self.threshold_mode == "without":
+                density_pct_frame = min(100, round(person_count * 2.0))
+                occupancy_pct_frame = "N/A"
+                thresh_val = "Disabled"
+            else:
+                density_pct_frame = min(100, round(100 * person_count / max(self.threshold or 1, 1)))
+                occupancy_pct_frame = min(100, round(100 * person_count / max((self.threshold or 1) * 1.5, 1)))
+                thresh_val = self.threshold
+
             frame_data_list.append({
                 "frame": frame_id,
                 "t": round(t_sec, 3),
@@ -360,17 +368,17 @@ class VideoJob(threading.Thread):
                 "status": status,
                 "density_pct": density_pct_frame,
                 "occupancy_pct": occupancy_pct_frame,
-                "threshold": self.threshold,
+                "threshold": thresh_val,
                 "inference_ms": inference_ms,
             })
 
             # --- timeseries sampling ---
             if t_sec >= next_sample_t:
-                timeseries.append({"t": round(t_sec, 1), "count": person_count, "status": status})
+                timeseries.append({"t": round(t_sec, 1), "count": person_count, "status": status, "density": density_pct_frame})
                 next_sample_t += sample_interval
 
-            # --- event tracking ---
-            if status != "SAFE":
+            # --- event tracking (only in With Threshold mode) ---
+            if self.threshold_mode == "with" and status != "SAFE":
                 if current_event is None:
                     current_event = {
                         "start_t": t_sec, "end_t": t_sec, "peak_count": person_count,
@@ -384,7 +392,7 @@ class VideoJob(threading.Thread):
                         current_event["peak_count"] = person_count
                         current_event["keyframe_frame"] = frame.copy()
             else:
-                if current_event is not None:
+                if current_event is not None and self.threshold_mode == "with":
                     self._close_event(current_event, events, keyframes)
                     current_event = None
 
@@ -401,8 +409,21 @@ class VideoJob(threading.Thread):
                 )
 
         # close any event still open at end of video
-        if current_event is not None:
+        if current_event is not None and self.threshold_mode == "with":
             self._close_event(current_event, events, keyframes)
+
+        # In without-threshold mode, if no keyframes, capture peak crowd frame
+        if self.threshold_mode == "without" and not keyframes and peak_frame is not None:
+            kf_filename = f"{self.job_id}_kf1.jpg"
+            kf_path = os.path.join(config.KEYFRAME_DIR, kf_filename)
+            cv2.imwrite(kf_path, peak_frame)
+            keyframes.append({
+                "event_id": 1,
+                "t": round(peak_time if 'peak_time' in locals() else 0.0, 1),
+                "count": max(counts_all) if counts_all else 0,
+                "severity": "MONITORING",
+                "url": f"/media/keyframes/{kf_filename}",
+            })
 
         cap.release()
         if writer is not None:
@@ -443,9 +464,13 @@ class VideoJob(threading.Thread):
         severity_counts = {"WARNING": 0, "HIGH": 0, "CRITICAL": 0}
         for e in events:
             severity_counts[e["severity"]] = severity_counts.get(e["severity"], 0) + 1
-        overall_risk = "CRITICAL" if severity_counts["CRITICAL"] else \
-            "HIGH" if severity_counts["HIGH"] else \
-            "WARNING" if severity_counts["WARNING"] else "SAFE"
+        
+        if self.threshold_mode == "without":
+            overall_risk = "DISABLED"
+        else:
+            overall_risk = "CRITICAL" if severity_counts["CRITICAL"] else \
+                "HIGH" if severity_counts["HIGH"] else \
+                "WARNING" if severity_counts["WARNING"] else "SAFE"
 
         # derive the stored upload filename from the filepath
         uploaded_basename = os.path.basename(self.filepath)
@@ -453,6 +478,7 @@ class VideoJob(threading.Thread):
         result = {
             "job_id": self.job_id,
             "user_id": self.user_id,
+            "threshold_mode": self.threshold_mode,
             "original_filename": self.original_filename,
             "uploaded_by": self.uploaded_by,
             "processed_at": datetime.now().isoformat(timespec="seconds"),
@@ -465,10 +491,11 @@ class VideoJob(threading.Thread):
                 "uploaded_url": f"/media/uploads/{uploaded_basename}",
             },
             "summary": {
+                "threshold_mode": self.threshold_mode,
                 "avg_count": round(avg_count, 1),
                 "max_count": max_count,
                 "peak_time_sec": round(peak_time, 1),
-                "total_alerts": len(events),
+                "total_alerts": len(events) if self.threshold_mode == "with" else 0,
                 "alerts_by_severity": severity_counts,
                 "overall_risk": overall_risk,
                 "threshold": self.threshold,
@@ -525,6 +552,8 @@ class VideoJob(threading.Thread):
 
     # -- helpers ------------------------------------------------------------
     def _close_event(self, ev, events, keyframes):
+        if self.threshold_mode == "without" or self.threshold is None:
+            return
         duration = ev["end_t"] - ev["start_t"]
         if duration < config.MIN_EVENT_DURATION_SECONDS:
             return
@@ -533,7 +562,7 @@ class VideoJob(threading.Thread):
         kf_path = os.path.join(config.KEYFRAME_DIR, kf_filename)
         cv2.imwrite(kf_path, ev["keyframe_frame"])
 
-        density_pct = min(100, round(100 * ev["peak_count"] / max(self.threshold, 1)))
+        density_pct = min(100, round(100 * ev["peak_count"] / max(self.threshold or 1, 1)))
         events.append({
             "id": event_id,
             "start_t": round(ev["start_t"], 1),
@@ -585,6 +614,8 @@ class VideoJob(threading.Thread):
         history.insert(0, {
             "job_id": result["job_id"],
             "user_id": result.get("user_id"),
+            "threshold_mode": result.get("threshold_mode", "with"),
+            "threshold": result["summary"].get("threshold"),
             "original_filename": result["original_filename"],
             "uploaded_by": result["uploaded_by"],
             "processed_at": result["processed_at"],
@@ -599,6 +630,8 @@ class VideoJob(threading.Thread):
             json.dump(history, f)
 
     def _dispatch_summary_alert(self, result):
+        if result.get("threshold_mode") == "without" or result.get("summary", {}).get("threshold_mode") == "without":
+            return
         severity = result["summary"]["overall_risk"]
 
         if severity not in ("HIGH", "CRITICAL"):
@@ -624,7 +657,7 @@ class VideoJob(threading.Thread):
             result["original_filename"],
             f"{severity} OVERCROWDING DETECTED",
             details,
-    )
+        )
 
     def _maybe_generate_pdf(self, result):
         try:
@@ -636,7 +669,9 @@ class VideoJob(threading.Thread):
             original_path = config.PDF_REPORT_PATH
             config.PDF_REPORT_PATH = report_path
             try:
-                generate_report(result["original_filename"], count_history, alert_rows)
+                generate_report(result["original_filename"], count_history, alert_rows,
+                                threshold=result["summary"].get("threshold"),
+                                threshold_mode=result["summary"].get("threshold_mode", "with"))
             finally:
                 config.PDF_REPORT_PATH = original_path
         except Exception as exc:
